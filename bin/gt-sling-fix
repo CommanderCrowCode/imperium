@@ -88,10 +88,17 @@ role_bead: gt-polecat-role" 2>/dev/null || true
 
 echo ""
 echo "✓ Slung: $BEAD_ID → $AGENT_ID"
+
+# Auto-spawn tmux session with Claude
+SESSION_NAME="gt-${RIG}-${POLECAT_NAME}"
+if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    echo "✓ Session already running: $SESSION_NAME"
+else
+    echo "🚀 Spawning polecat session..."
+    cd "$POLECAT_DIR" && tmux new-session -d -s "$SESSION_NAME" "claude"
+    echo "✓ Spawned: $SESSION_NAME"
+fi
+
 echo ""
-echo "To start the polecat session:"
-echo "  cd $POLECAT_DIR"
-echo "  claude"
-echo ""
-echo "Or attach to existing tmux session if running:"
-echo "  tmux attach -t gt-${RIG}-${POLECAT_NAME}"
+echo "To attach:"
+echo "  tmux attach -t $SESSION_NAME"
