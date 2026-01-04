@@ -186,6 +186,37 @@ bd show hq-abc      # Routes to town beads
 - `gt mail read <id>` - Read a specific message
 - `gt mail send <addr> -s "Subject" -m "Message"` - Send mail
 
+### Mail Routing (IMPORTANT)
+
+**Choose recipient based on whether you need autonomous or async handling:**
+
+| Recipient | Has Session? | Use Case |
+|-----------|--------------|----------|
+| `overseer` | N/A (human) | Direct to human, urgent decisions |
+| `<rig>/polecats/<name>` | ✅ Yes (24/7) | Needs autonomous immediate handling |
+| `<rig>/crew/<name>` | ❌ No | Async to human (they'll see it next time they work in that rig) |
+| `<rig>/witness` | ✅ Yes | Rig-level coordination, polecat issues |
+| `<rig>/refinery` | ✅ Yes | Merge queue, PR handling |
+
+**Key distinction:**
+- **Crew** = Human workspace. No persistent Claude session. Mail sits until human opens that rig.
+- **Polecats** = Autonomous workers. Persistent Claude sessions. Will auto-check mail via `gt prime`.
+
+**Common mistake:** Sending to `crew/tanwa` expecting immediate response. Crew has no
+running session - use polecats for autonomous work.
+
+**When to use each:**
+```bash
+# Need immediate autonomous action → polecat
+gt mail send 10x_screening/polecats/furiosa -s "..." -m "..."
+
+# Async note for human's next session in that rig → crew
+gt mail send 10x_screening/crew/tanwa -s "..." -m "..."
+
+# Need human decision now → overseer
+gt mail send overseer -s "..." -m "..."
+```
+
 ### Status
 - `gt status` - Overall town status
 - `gt rigs` - List all rigs
