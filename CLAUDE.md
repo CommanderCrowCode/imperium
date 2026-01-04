@@ -245,9 +245,22 @@ bd show <bead-id>
 - `blocked-external`: Waiting on external party (vendor, API provider, etc.)
 
 **When reviewing ready work:**
-1. Filter out `human-required` beads - report these to human separately
+1. Filter out `human-required` beads
 2. Only sling beads that agents can complete autonomously
 3. If unsure, check bead description for clues ("REQUIRES:", "needs from", etc.)
+
+**For `human-required` beads that are otherwise ready:**
+Send mail to overseer requesting the needed input:
+```bash
+gt mail send overseer/ -s "🚧 Human input needed: <bead-id>" -m "
+Bead <bead-id> is ready to work but requires human action:
+
+<what's needed>
+
+Once resolved, I can sling this to a polecat.
+"
+```
+This ensures human-blocked work doesn't silently stall.
 
 ### Rig Beads Database Audit
 
