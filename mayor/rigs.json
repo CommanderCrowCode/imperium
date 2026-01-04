@@ -9,12 +9,28 @@
         "prefix": "1s"
       }
     },
+    "flamingo_dominion": {
+      "git_url": "git@github.com:CommanderCrowCode/dominion.git",
+      "added_at": "2026-01-04T23:46:14.075912+07:00",
+      "beads": {
+        "repo": "",
+        "prefix": "fd"
+      }
+    },
     "lumicello_inventory": {
       "git_url": "git@github.com:CommanderCrowCode/inventory_management.git",
       "added_at": "2026-01-04T23:32:36.858565+07:00",
       "beads": {
         "repo": "",
         "prefix": "li"
+      }
+    },
+    "lumicello_website": {
+      "git_url": "git@github.com:CommanderCrowCode/lumicello_website.git",
+      "added_at": "2026-01-04T23:56:13.148327+07:00",
+      "beads": {
+        "repo": "",
+        "prefix": "lw"
       }
     },
     "tanwa_info": {
