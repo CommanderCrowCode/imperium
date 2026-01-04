@@ -40,6 +40,14 @@
         "repo": "",
         "prefix": "ti"
       }
+    },
+    "tools_cc_monitor": {
+      "git_url": "git@github.com:CommanderCrowCode/claude_code_monitor.git",
+      "added_at": "2026-01-05T00:44:44.662695+07:00",
+      "beads": {
+        "repo": "",
+        "prefix": "tcm"
+      }
     }
   }
 }
