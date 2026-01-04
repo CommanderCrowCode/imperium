@@ -205,6 +205,17 @@ bd show hq-abc      # Routes to town beads
 **Common mistake:** Sending to `crew/tanwa` expecting immediate response. Crew has no
 running session - use polecats for autonomous work.
 
+**Need immediate autonomous response?** Spin up a new polecat:
+```bash
+# Create polecat and sling work to it (starts session automatically)
+~/gt/bin/gt-sling-fix <bead-id> <rig> <polecat-name>
+
+# Example: need info from 10x_screening repo immediately
+bd create --title="Gather API documentation" --type=task
+~/gt/bin/gt-sling-fix ds-xyz 10x_screening researcher
+```
+The polecat will start, execute the work, and you can check results via mail or bead status.
+
 **When to use each:**
 ```bash
 # Need immediate autonomous action → polecat
