@@ -1,0 +1,97 @@
+#!/bin/bash
+# gt-sling-fix: Workaround for gt sling hook issues
+# Usage: gt-sling-fix <bead-id> <rig> [polecat-name]
+#
+# This script:
+# 1. Creates polecat if needed (or uses existing)
+# 2. Creates agent bead if missing
+# 3. Hooks the bead with proper assignee
+# 4. Sends mail with context
+
+set -e
+
+if [ -z "$1" ] || [ -z "$2" ]; then
+    echo "Usage: gt-sling-fix <bead-id> <rig> [polecat-name]"
+    echo "Example: gt-sling-fix ds-ctz 10x_screening"
+    echo "Example: gt-sling-fix ds-ctz 10x_screening furiosa"
+    exit 1
+fi
+
+BEAD_ID="$1"
+RIG="$2"
+POLECAT_NAME="${3:-furiosa}"  # Default to furiosa
+GT_ROOT="/Users/tanwa/gt"
+
+POLECAT_DIR="$GT_ROOT/$RIG/polecats/$POLECAT_NAME"
+AGENT_ID="$RIG/polecats/$POLECAT_NAME"
+
+echo "🎯 Slinging $BEAD_ID to $AGENT_ID"
+echo ""
+
+# Check if polecat exists
+if [ ! -d "$POLECAT_DIR" ]; then
+    echo "Creating polecat $POLECAT_NAME..."
+    gt polecat add "$RIG" "$POLECAT_NAME" --naked 2>/dev/null || true
+fi
+
+# Ensure beads redirect exists in polecat
+if [ ! -f "$POLECAT_DIR/.beads/redirect" ]; then
+    mkdir -p "$POLECAT_DIR/.beads"
+    echo "../../mayor/rig/.beads" > "$POLECAT_DIR/.beads/redirect"
+    echo "Created beads redirect"
+fi
+
+# Get bead prefix for agent bead naming
+BEAD_PREFIX=$(echo "$BEAD_ID" | cut -d'-' -f1)
+
+# Create agent bead if missing
+AGENT_BEAD_ID="${BEAD_PREFIX}-${RIG}-polecat-${POLECAT_NAME}"
+if ! bd show "$AGENT_BEAD_ID" &>/dev/null; then
+    echo "Creating agent bead: $AGENT_BEAD_ID"
+    bd create --id="$AGENT_BEAD_ID" --type=agent \
+        --title="Polecat $POLECAT_NAME for $RIG" \
+        --description="$AGENT_BEAD_ID
+
+role_type: polecat
+rig: $RIG
+agent_state: idle
+hook_bead:
+role_bead: gt-polecat-role" --force 2>/dev/null || true
+fi
+
+# Unhook any existing beads assigned to this polecat
+cd "$POLECAT_DIR"
+echo "Checking for existing hooked beads..."
+EXISTING_HOOKED=$(bd list --status=hooked --assignee="$AGENT_ID" --json 2>/dev/null | jq -r '.[].id' 2>/dev/null || true)
+for OLD_BEAD in $EXISTING_HOOKED; do
+    if [ -n "$OLD_BEAD" ] && [ "$OLD_BEAD" != "$BEAD_ID" ]; then
+        echo "Unhooking previous bead: $OLD_BEAD"
+        bd update "$OLD_BEAD" --status=open 2>/dev/null || true
+    fi
+done
+
+# Hook the bead
+echo "Hooking $BEAD_ID..."
+gt hook "$BEAD_ID" 2>/dev/null || true
+
+# Fix: Set assignee
+bd update "$BEAD_ID" --assignee="$AGENT_ID"
+
+# Update agent bead with hook info
+bd update "$AGENT_BEAD_ID" --description="$AGENT_BEAD_ID
+
+role_type: polecat
+rig: $RIG
+agent_state: working
+hook_bead: $BEAD_ID
+role_bead: gt-polecat-role" 2>/dev/null || true
+
+echo ""
+echo "✓ Slung: $BEAD_ID → $AGENT_ID"
+echo ""
+echo "To start the polecat session:"
+echo "  cd $POLECAT_DIR"
+echo "  claude"
+echo ""
+echo "Or attach to existing tmux session if running:"
+echo "  tmux attach -t gt-${RIG}-${POLECAT_NAME}"

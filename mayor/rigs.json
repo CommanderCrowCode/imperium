@@ -1,4 +1,29 @@
 {
   "version": 1,
-  "rigs": {}
+  "rigs": {
+    "10x_screening": {
+      "git_url": "git@github.com:CommanderCrowCode/10x_deal_screening.git",
+      "added_at": "2026-01-04T22:48:48.123434+07:00",
+      "beads": {
+        "repo": "",
+        "prefix": "1s"
+      }
+    },
+    "lumicello_inventory": {
+      "git_url": "git@github.com:CommanderCrowCode/inventory_management.git",
+      "added_at": "2026-01-04T23:32:36.858565+07:00",
+      "beads": {
+        "repo": "",
+        "prefix": "li"
+      }
+    },
+    "tanwa_info": {
+      "git_url": "git@github.com:CommanderCrowCode/tanwa-info.git",
+      "added_at": "2026-01-04T22:40:21.471767+07:00",
+      "beads": {
+        "repo": "",
+        "prefix": "ti"
+      }
+    }
+  }
 }

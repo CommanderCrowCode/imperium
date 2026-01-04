@@ -1,0 +1,52 @@
+#!/bin/bash
+# gt-hook-fix: Workaround for gt hook not setting assignee
+# Usage: gt-hook-fix <bead-id>
+#
+# This script:
+# 1. Detects current agent identity from pwd
+# 2. Runs gt hook <bead>
+# 3. Sets assignee to current agent (the missing step)
+
+set -e
+
+if [ -z "$1" ]; then
+    echo "Usage: gt-hook-fix <bead-id>"
+    echo "Example: gt-hook-fix ds-ctz"
+    exit 1
+fi
+
+BEAD_ID="$1"
+
+# Detect agent identity from current directory
+# Pattern: /Users/tanwa/gt/<rig>/polecats/<name> or /Users/tanwa/gt/<rig>/crew/<name>
+PWD_PATH=$(pwd)
+GT_ROOT="/Users/tanwa/gt"
+
+if [[ "$PWD_PATH" =~ $GT_ROOT/([^/]+)/(polecats|crew)/([^/]+) ]]; then
+    RIG="${BASH_REMATCH[1]}"
+    ROLE_TYPE="${BASH_REMATCH[2]}"
+    NAME="${BASH_REMATCH[3]}"
+    AGENT_ID="${RIG}/${ROLE_TYPE}/${NAME}"
+elif [[ "$PWD_PATH" =~ $GT_ROOT/([^/]+)/(witness|refinery) ]]; then
+    RIG="${BASH_REMATCH[1]}"
+    ROLE_TYPE="${BASH_REMATCH[2]}"
+    AGENT_ID="${RIG}/${ROLE_TYPE}"
+elif [[ "$PWD_PATH" == "$GT_ROOT/mayor" ]] || [[ "$PWD_PATH" =~ $GT_ROOT/mayor/ ]]; then
+    AGENT_ID="mayor/"
+else
+    echo "Error: Cannot detect agent identity from pwd: $PWD_PATH"
+    echo "Run this from within a rig worker directory"
+    exit 1
+fi
+
+echo "🪝 Hooking $BEAD_ID to $AGENT_ID..."
+
+# Run the hook command
+gt hook "$BEAD_ID" || true
+
+# Set assignee (the fix)
+bd update "$BEAD_ID" --assignee="$AGENT_ID"
+
+echo "✓ Hooked and assigned: $BEAD_ID → $AGENT_ID"
+echo ""
+echo "Verify with: gt hook status"

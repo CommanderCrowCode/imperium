@@ -195,8 +195,32 @@ bd show hq-abc      # Routes to town beads
 - `gt convoy list` - Dashboard of active work (primary view)
 - `gt convoy status <id>` - Detailed convoy progress
 - `gt convoy create "name" <issues>` - Create convoy for batch work
-- `gt sling <bead> <rig>` - Assign work to polecat (auto-creates convoy)
 - `bd ready` - Issues ready to work (no blockers)
+
+### Slinging Work (IMPORTANT: Use workaround scripts)
+
+**Known bug:** `gt sling` and `gt hook` don't properly set the `assignee` field,
+breaking hook lookup. Use these workaround scripts instead:
+
+```bash
+# Sling a bead to a polecat (creates polecat if needed)
+~/gt/bin/gt-sling-fix <bead-id> <rig> [polecat-name]
+
+# Example:
+~/gt/bin/gt-sling-fix ds-ctz 10x_screening
+~/gt/bin/gt-sling-fix ti-abc tanwa_info furiosa
+
+# Hook a bead from within a worker directory
+~/gt/bin/gt-hook-fix <bead-id>
+```
+
+These scripts:
+1. Create polecat and agent bead if missing
+2. Unhook any existing beads from that polecat
+3. Hook the new bead
+4. Set `assignee` field (the missing step in `gt hook`)
+
+**Do NOT use** `gt sling <bead> <rig>` directly until the bug is fixed.
 - `bd list --status=open` - All open issues
 
 ### Delegation
