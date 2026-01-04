@@ -222,6 +222,33 @@ These scripts:
 
 **Do NOT use** `gt sling <bead> <rig>` directly until the bug is fixed.
 
+### Pre-Sling Checklist
+
+**Before slinging ANY bead, verify it's agent-actionable:**
+
+```bash
+# 1. Get ready work
+bd ready
+
+# 2. For each candidate, check labels
+bd show <bead-id>
+
+# 3. DO NOT SLING if bead has these labels:
+#    - human-required  (needs human action)
+#    - waiting-on-human
+#    - blocked-external
+```
+
+**Label convention:**
+- `human-required`: Cannot be completed by agent alone (e.g., send file, make call)
+- `waiting-on-human`: Paused waiting for human input/decision
+- `blocked-external`: Waiting on external party (vendor, API provider, etc.)
+
+**When reviewing ready work:**
+1. Filter out `human-required` beads - report these to human separately
+2. Only sling beads that agents can complete autonomously
+3. If unsure, check bead description for clues ("REQUIRES:", "needs from", etc.)
+
 ### Rig Beads Database Audit
 
 Run this periodically to verify rig beads are configured correctly:
