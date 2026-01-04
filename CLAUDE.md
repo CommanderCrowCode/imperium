@@ -396,4 +396,35 @@ cross-session continuity when work doesn't fit neatly into a bead.
     gt mail send mayor/ -s "🤝 HANDOFF: <brief>" -m "<context>"
 ```
 
+## Rig Housekeeping Reference
+
+Quick reference for code quality and housekeeping files in each rig:
+
+| Rig | Key Housekeeping Files | Notes |
+|-----|------------------------|-------|
+| **10x_screening** | `README.md`, `PDF_QA_CHECKLIST.md`, `INSTRUCTIONS.md` | Python pipeline; 28+ doc files - may need cleanup |
+| **flamingo_dominion** | `README.md` (infrastructure specs) | Infrastructure registry; servers, DBs, ports documented |
+| **lumicello_inventory** | `TODO.md` (action items), `ORDER_WORKFLOW.md` | Business workflows in markdown; TODO has deadlines |
+| **lumicello_website** | `QA_CHECKLIST.md`, `SECURITY_DECISIONS.md`, `work_log.md` | Website project with security/QA tracking |
+| **tanwa_info** | `checklist.md` (Design Bible), `ARCHITECTURE.md`, `BLACKLIST.md` | Portfolio site; checklist.md is the design source of truth |
+| **tools_cc_monitor** | `PROJECT_STATUS.md`, `QUICKSTART.md` | macOS app - marked complete; has comprehensive docs |
+
+### Per-Rig Cleanup Patterns
+
+**10x_screening**:
+- Lots of one-off report files (ERROR_FIX_REPORT.md, etc.) - archive old reports
+- Check `outputs/` for stale research results
+
+**lumicello_inventory**:
+- `TODO.md` has time-sensitive deadlines - review weekly
+- Transaction logs may grow large
+
+**tanwa_info**:
+- `checklist.md` is the design bible - don't deviate
+- `BLACKLIST.md` lists things to avoid
+
+**tools_cc_monitor**:
+- Largely complete - maintenance mode
+- Check `~/.claude-usage/` for database growth
+
 Town root: /Users/tanwa/gt
