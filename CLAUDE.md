@@ -219,8 +219,13 @@ These scripts:
 2. Unhook any existing beads from that polecat
 3. Hook the new bead
 4. Set `assignee` field (the missing step in `gt hook`)
+5. **Auto-spawn tmux session** with Claude (polecat starts working immediately)
 
 **Do NOT use** `gt sling <bead> <rig>` directly until the bug is fixed.
+
+**Note:** The Witness monitors polecats but doesn't spawn sessions. Mayor must use
+`gt-sling-fix` which handles both hooking AND spawning. This is a Gas Town gap
+tracked in HQ beads for future upgrade.
 
 ### Pre-Sling Checklist
 
