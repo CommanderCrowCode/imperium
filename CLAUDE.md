@@ -221,6 +221,36 @@ These scripts:
 4. Set `assignee` field (the missing step in `gt hook`)
 
 **Do NOT use** `gt sling <bead> <rig>` directly until the bug is fixed.
+
+### Rig Beads Database Audit
+
+Run this periodically to verify rig beads are configured correctly:
+
+```bash
+# Check routes match actual prefixes
+cat ~/gt/.beads/routes.jsonl
+
+# Verify each rig's database
+for rig in tanwa_info 10x_screening lumicello_inventory flamingo_dominion; do
+  echo "=== $rig ==="
+  bd list --status=open 2>&1 | head -3
+done
+```
+
+**Current rig configuration (2026-01-04):**
+
+| Rig | Route Prefix | Beads Location | Notes |
+|-----|--------------|----------------|-------|
+| tanwa_info | `ti-` | crew/tanwa/.beads | ✅ OK |
+| 10x_screening | `ds-` | mayor/rig/.beads | ✅ OK |
+| lumicello_inventory | `inventory_management-` | mayor/rig/.beads | ⚠️ Mixed with `li-` |
+| flamingo_dominion | `fd-` | mayor/rig/.beads | ✅ Empty (new) |
+
+**Common issues:**
+- Prefix mismatch: Route says `X-` but beads use `Y-` → Fix routes.jsonl
+- No .beads in mayor/rig: Run `bd init --prefix=XX` in that directory
+- beads_viewer compatibility: Ensure issues.jsonl exists and is valid JSON lines
+
 - `bd list --status=open` - All open issues
 
 ### Delegation
