@@ -97,21 +97,15 @@ if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     echo "📨 Sending prompt to check hook..."
     sleep 1
     tmux send-keys -t "$SESSION_NAME" "gt prime" Enter
-    sleep 3
-    # Confirm permission prompt if it appears
-    tmux send-keys -t "$SESSION_NAME" Enter
 else
     echo "🚀 Spawning polecat session..."
-    cd "$POLECAT_DIR" && tmux new-session -d -s "$SESSION_NAME" "claude"
+    cd "$POLECAT_DIR" && tmux new-session -d -s "$SESSION_NAME" "claude --dangerously-skip-permissions"
     echo "✓ Spawned: $SESSION_NAME"
     # Wait for Claude to initialize, then send prompt
     echo "⏳ Waiting for Claude to initialize..."
     sleep 5
     echo "📨 Sending 'gt prime' to trigger hook..."
     tmux send-keys -t "$SESSION_NAME" "gt prime" Enter
-    sleep 3
-    # Confirm permission prompt if it appears
-    tmux send-keys -t "$SESSION_NAME" Enter
 fi
 echo "✅ Polecat should now be working"
 
