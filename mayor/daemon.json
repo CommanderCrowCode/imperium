@@ -1,0 +1,16 @@
+{
+  "heartbeat": {
+    "enabled": true,
+    "interval": "5m"
+  },
+  "patrols": {
+    "deacon": {
+      "schedule": "*/5 * * * *",
+      "command": "gt patrol deacon"
+    },
+    "witness": {
+      "schedule": "*/2 * * * *",
+      "command": "gt patrol witness"
+    }
+  }
+}
