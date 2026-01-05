@@ -427,4 +427,107 @@ Quick reference for code quality and housekeeping files in each rig:
 - Largely complete - maintenance mode
 - Check `~/.claude-usage/` for database growth
 
+## Expected Agent Behaviors (Gas Town Spec)
+
+Reference from Steve Yegge's Gas Town article. Use these to verify agents are working correctly.
+
+### 🎩 Mayor (Town-wide Coordinator)
+| Behavior | Expected | Test |
+|----------|----------|------|
+| Dispatch convoys | Creates convoys spanning multiple rigs | `gt convoy create` |
+| Cross-rig coordination | Routes work to correct rig polecats | `gt sling <bead> <rig>` |
+| Receive notifications | Gets notified when convoys finish | Check mail after convoy lands |
+
+### 😺 Polecats (Per-task Workers)
+| Behavior | Expected | Test |
+|----------|----------|------|
+| GUPP execution | If work hooked → execute immediately on startup | `gt prime` after hook |
+| Ephemeral lifecycle | Spawn → work → decommission after merge | Watch polecat after MR lands |
+| Crash survival | Resume from last checkpoint via molecule state | Kill mid-work, restart |
+| Bead progress | Mark in_progress → close on completion | `bd show <bead>` during work |
+| Name recycling | Names available for reuse after decommission | Check polecat list |
+
+### 🦉 Witness (Per-rig Monitor)
+| Behavior | Expected | Test |
+|----------|----------|------|
+| Stuck detection | Detect polecats with no activity 5+ min | Let polecat idle |
+| Auto-spawn | Spawn polecat when ready work available | `bd ready` with no polecat |
+| Nudge workers | Send nudge to stuck workers | Watch for nudge messages |
+| NOT manage Crew | Crew works for Overseer, not Witness | Idle crew, verify no nudge |
+| Run rig plugins | Execute rig-level plugins in patrol | Check witness patrol |
+
+### 🏭 Refinery (Per-rig Merge Queue)
+| Behavior | Expected | Test |
+|----------|----------|------|
+| One-at-a-time merge | Process MQ sequentially | Queue 2+ MRs |
+| Preflight cleanup | Clean workspace before processing | Watch refinery startup |
+| Postflight handoff | Handoff steps after queue empty | Watch queue drain |
+| Escalate conflicts | Escalate unresolvable merge conflicts | Create conflicting MRs |
+| No work lost | All MRs eventually merged or escalated | Track MR outcomes |
+
+### 🐺 Deacon (Town-wide Daemon)
+| Behavior | Expected | Test |
+|----------|----------|------|
+| DYFJ propagation | Propagate "Do Your Job" to workers | Observe signal flow |
+| Patrol loop | Run patrol workflow in loop | Watch deacon session |
+| Delegate to Dogs | Sling complex work to Dogs | Check dog activity |
+
+### 🐶 Dogs & Boot
+| Behavior | Expected | Test |
+|----------|----------|------|
+| Boot check (5 min) | Boot wakes every 5 min, checks Deacon | Watch boot timing |
+| Handle maintenance | Dogs do cleanup, stale branches | Check dog completions |
+| Plugin execution | Dogs run plugins for Deacon | Trigger plugin |
+
+### 👷 Crew (Human Workspaces)
+| Behavior | Expected | Test |
+|----------|----------|------|
+| NOT managed by Witness | No nudging, no auto-spawn | Idle crew, verify |
+| Long-lived identity | Identity persists across sessions | Check crew beads |
+| Overseer-directed | Work for human, not Gas Town | Assign via mail |
+
+### Cross-cutting Behaviors
+| Behavior | Expected | Test |
+|----------|----------|------|
+| Exponential backoff | Patrols slow down when no work | Watch idle patrol timing |
+| Graceful degradation | Workers work independently if others down | Stop Deacon, verify Witness |
+| Cross-rig work | Use `gt worktree` for other rigs | Assign cross-rig task |
+| gt handoff | Graceful cleanup and restart | Issue `/handoff` |
+
+### Known Gaps & Workarounds
+
+| Gap | Workaround | Tracking | Test Status |
+|-----|------------|----------|-------------|
+| `gt hook` doesn't set assignee | Use `~/gt/bin/gt-hook-fix` | gm-d2e | ⚠️ Known |
+| `gt sling` doesn't spawn session | Use `~/gt/bin/gt-sling-fix` | gm-gah | ⚠️ Known |
+| Witness doesn't auto-spawn | Mayor uses gt-sling-fix | gm-gah | ⚠️ Known |
+| GUPP: Polecats don't auto-execute | Need stronger nudge mechanism | gm-91a | ❌ FAIL |
+| Witness stuck detection inaccurate | Checks bead status, not session | gm-uxw | ❌ FAIL |
+| gt nudge session naming mismatch | Use tmux send-keys directly | - | ⚠️ Known |
+| Crew NOT managed by Witness | Working as designed | gm-9sk | ✅ PASS |
+
+### Test Results (2026-01-05)
+
+**GUPP - Polecat Auto-Execute (gm-91a): ❌ FAIL**
+- Polecats receive `gt prime` but sit idle at INSERT prompt
+- Manual nudge ("do your job") also fails to trigger execution
+- Claude Code is "miserably polite" as article predicts
+- **Workaround needed**: Stronger trigger or repeated nudging
+
+**Witness Stuck Detection (gm-uxw): ❌ FAIL**
+- Witness reports polecat as "working" when actually stuck/idle
+- Polecat sat unresponsive for 10+ minutes without detection
+- **Root cause**: Witness checks bead status (hooked=working), not actual session activity
+- **Workaround needed**: Session activity monitoring (tmux output, tool calls)
+
+**Crew Independence (gm-9sk): ✅ PASS**
+- Witness correctly ignores Crew members
+- `gt polecat list` only shows polecats, not crew
+- Witness patrol makes no mention of Crew
+
+**gt nudge Session Naming: ⚠️ MISMATCH**
+- gt nudge expects: `gt-RIG-polecats/NAME`
+- gt-sling-fix creates: `gt-RIG-NAME`
+- **Workaround**: Use `tmux send-keys -t gt-RIG-NAME "message" Enter`
+
 Town root: /Users/tanwa/gt
