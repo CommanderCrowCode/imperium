@@ -106,15 +106,12 @@ if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     sleep 1
 fi
 
-echo "🚀 Spawning polecat session..."
-tmux new-session -d -s "$SESSION_NAME" "cd $POLECAT_DIR && claude --dangerously-skip-permissions"
+echo "🚀 Spawning polecat session with GUPP auto-execute..."
+# GUPP FIX: Pipe "gt prime" directly to Claude so it auto-executes on startup
+# This bypasses the INSERT prompt wait issue
+tmux new-session -d -s "$SESSION_NAME" "cd $POLECAT_DIR && echo 'gt prime' | claude --dangerously-skip-permissions"
 echo "✓ Spawned: $SESSION_NAME"
-# Wait for Claude to initialize, then send prompt
-echo "⏳ Waiting for Claude to initialize..."
-sleep 6
-echo "📨 Sending 'gt prime' to trigger hook..."
-tmux send-keys -t "$SESSION_NAME" "gt prime" Enter
-echo "✅ Polecat should now be working"
+echo "✅ Polecat auto-executing via piped input (GUPP fix)"
 
 echo ""
 echo "To attach:"

@@ -501,21 +501,21 @@ Reference from Steve Yegge's Gas Town article. Use these to verify agents are wo
 | ~~`gt hook` assignee format~~ | ~~Use `~/gt/bin/gt-hook-fix`~~ | gm-d2e | ✅ FIXED |
 | `gt sling` doesn't spawn session | Use `~/gt/bin/gt-sling-fix` | gm-gah | ⚠️ Known |
 | Witness doesn't auto-spawn | Mayor uses gt-sling-fix | gm-gah | ⚠️ Known |
-| GUPP: Polecats don't auto-execute | Need stronger nudge mechanism | gm-91a | ❌ FAIL |
+| ~~GUPP: Polecats don't auto-execute~~ | ~~Piped input: `echo "gt prime" \| claude`~~ | gm-6yi | ✅ FIXED |
 | Witness stuck detection inaccurate | Checks bead status, not session | gm-uxw | ❌ FAIL |
 | gt nudge session naming mismatch | Use tmux send-keys directly | - | ⚠️ Known |
 | Crew NOT managed by Witness | Working as designed | gm-9sk | ✅ PASS |
 | `gt convoy create` prefix mismatch | Manual hook + gt prime | gm-4n1 | ❌ FAIL |
-| Polecat doesn't update status | Cascading from GUPP failure | gm-fsa | ❌ FAIL |
+| ~~Polecat doesn't update status~~ | ~~GUPP fix cascades~~ | gm-fsa | ✅ FIXED |
 | ~~Witness hook tracking~~ | ~~Uses bd list not .gt-hook~~ | gm-2f4 | ✅ FIXED |
 
 ### Test Results (2026-01-05)
 
-**GUPP - Polecat Auto-Execute (gm-91a): ❌ FAIL**
-- Polecats receive `gt prime` but sit idle at INSERT prompt
-- Manual nudge ("do your job") also fails to trigger execution
-- Claude Code is "miserably polite" as article predicts
-- **Workaround needed**: Stronger trigger or repeated nudging
+**GUPP - Polecat Auto-Execute (gm-6yi): ✅ FIXED**
+- Root cause: Claude Code sits at INSERT prompt waiting for input
+- Solution: Pipe input directly on spawn: `echo "gt prime" | claude --dangerously-skip-permissions`
+- Scripts updated: `~/gt/bin/gt-sling-fix`, `~/gt/bin/gt-spawn-agent`
+- All polecats and witnesses now auto-execute on spawn
 
 **Witness Stuck Detection (gm-uxw): ❌ FAIL**
 - Witness reports polecat as "working" when actually stuck/idle
@@ -541,11 +541,9 @@ Reference from Steve Yegge's Gas Town article. Use these to verify agents are wo
 - **Not tested**: Auto-spawn (no rig-specific beads available)
 - **Fixed (gm-d2e)**: assigneeID() format mismatch - now shows hooked beads correctly
 
-**Polecat Bead Progress (gm-fsa): ❌ FAIL**
-- fd-5lb hooked to furiosa but status=hooked (not in_progress)
-- Assignee correctly set
-- **Root cause**: GUPP failure prevents polecat from starting work
-- Status update never happens because work never begins
+**Polecat Bead Progress (gm-fsa): ✅ FIXED**
+- With GUPP fix, polecats now auto-execute and update bead status
+- Verified: lumicello_website/nux updated lw-fcc to in_progress autonomously
 
 **Mayor Cross-rig Convoys (gm-4n1): ❌ FAIL**
 - `gt convoy create` failed with prefix mismatch error

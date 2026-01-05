@@ -1,0 +1,58 @@
+#!/bin/bash
+# gt-spawn-agent: Spawn any Gas Town agent with GUPP auto-execute
+# Usage: gt-spawn-agent <agent-dir> [session-name]
+#
+# This uses the GUPP fix: pipe "gt prime" directly to Claude
+# so it auto-executes immediately without waiting at INSERT prompt
+
+set -e
+
+if [ -z "$1" ]; then
+    echo "Usage: gt-spawn-agent <agent-dir> [session-name]"
+    echo ""
+    echo "Examples:"
+    echo "  gt-spawn-agent ~/gt/10x_screening/polecats/furiosa"
+    echo "  gt-spawn-agent ~/gt/tanwa_info/witness"
+    echo "  gt-spawn-agent ~/gt/10x_screening/refinery"
+    exit 1
+fi
+
+AGENT_DIR="$1"
+
+# Derive session name from path if not provided
+if [ -z "$2" ]; then
+    # Extract: rig/role or rig/polecats/name
+    REL_PATH=$(echo "$AGENT_DIR" | sed 's|.*/gt/||')
+    RIG=$(echo "$REL_PATH" | cut -d'/' -f1)
+    ROLE_OR_POLECATS=$(echo "$REL_PATH" | cut -d'/' -f2)
+
+    if [ "$ROLE_OR_POLECATS" = "polecats" ]; then
+        POLECAT_NAME=$(echo "$REL_PATH" | cut -d'/' -f3)
+        SESSION_NAME="gt-${RIG}-${POLECAT_NAME}"
+    else
+        SESSION_NAME="gt-${RIG}-${ROLE_OR_POLECATS}"
+    fi
+else
+    SESSION_NAME="$2"
+fi
+
+# Verify directory exists
+if [ ! -d "$AGENT_DIR" ]; then
+    echo "ERROR: Agent directory not found: $AGENT_DIR"
+    exit 1
+fi
+
+# Kill existing session if any
+if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    echo "⚠️  Killing existing session: $SESSION_NAME"
+    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+    sleep 1
+fi
+
+# Spawn with GUPP fix: pipe gt prime directly
+echo "🚀 Spawning $SESSION_NAME with GUPP auto-execute..."
+tmux new-session -d -s "$SESSION_NAME" "cd $AGENT_DIR && echo 'gt prime' | claude --dangerously-skip-permissions"
+echo "✅ Spawned: $SESSION_NAME (auto-executing)"
+echo ""
+echo "To attach:"
+echo "  tmux attach -t $SESSION_NAME"
