@@ -505,6 +505,9 @@ Reference from Steve Yegge's Gas Town article. Use these to verify agents are wo
 | Witness stuck detection inaccurate | Checks bead status, not session | gm-uxw | ❌ FAIL |
 | gt nudge session naming mismatch | Use tmux send-keys directly | - | ⚠️ Known |
 | Crew NOT managed by Witness | Working as designed | gm-9sk | ✅ PASS |
+| `gt convoy create` prefix mismatch | Manual hook + gt prime | gm-4n1 | ❌ FAIL |
+| Polecat doesn't update status | Cascading from GUPP failure | gm-fsa | ❌ FAIL |
+| Witness can't see hook file | Uses bd list not .gt-hook | gm-2f4 | ⚠️ PARTIAL |
 
 ### Test Results (2026-01-05)
 
@@ -529,5 +532,24 @@ Reference from Steve Yegge's Gas Town article. Use these to verify agents are wo
 - gt nudge expects: `gt-RIG-polecats/NAME`
 - gt-sling-fix creates: `gt-RIG-NAME`
 - **Workaround**: Use `tmux send-keys -t gt-RIG-NAME "message" Enter`
+
+**Witness Patrol (gm-2f4): ⚠️ PARTIAL**
+- Witness patrol works when triggered via `gt prime`
+- Correctly detects stuck polecat at INSERT mode
+- Nudges via tmux send-keys
+- Checks for ready work
+- **Not tested**: Auto-spawn (no rig-specific beads available)
+- **Found bug**: Witness doesn't see hook file content (fd-5lb) - discrepancy in hook tracking
+
+**Polecat Bead Progress (gm-fsa): ❌ FAIL**
+- fd-5lb hooked to furiosa but status=hooked (not in_progress)
+- Assignee correctly set
+- **Root cause**: GUPP failure prevents polecat from starting work
+- Status update never happens because work never begins
+
+**Mayor Cross-rig Convoys (gm-4n1): ❌ FAIL**
+- `gt convoy create` failed with prefix mismatch error
+- "database uses gm but you specified hq"
+- **Workaround**: Manual hook (echo bead-id > .gt-hook) + gt prime
 
 Town root: /Users/tanwa/gt
