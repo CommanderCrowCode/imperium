@@ -498,7 +498,7 @@ Reference from Steve Yegge's Gas Town article. Use these to verify agents are wo
 
 | Gap | Workaround | Tracking | Test Status |
 |-----|------------|----------|-------------|
-| `gt hook` doesn't set assignee | Use `~/gt/bin/gt-hook-fix` | gm-d2e | ⚠️ Known |
+| ~~`gt hook` assignee format~~ | ~~Use `~/gt/bin/gt-hook-fix`~~ | gm-d2e | ✅ FIXED |
 | `gt sling` doesn't spawn session | Use `~/gt/bin/gt-sling-fix` | gm-gah | ⚠️ Known |
 | Witness doesn't auto-spawn | Mayor uses gt-sling-fix | gm-gah | ⚠️ Known |
 | GUPP: Polecats don't auto-execute | Need stronger nudge mechanism | gm-91a | ❌ FAIL |
@@ -507,7 +507,7 @@ Reference from Steve Yegge's Gas Town article. Use these to verify agents are wo
 | Crew NOT managed by Witness | Working as designed | gm-9sk | ✅ PASS |
 | `gt convoy create` prefix mismatch | Manual hook + gt prime | gm-4n1 | ❌ FAIL |
 | Polecat doesn't update status | Cascading from GUPP failure | gm-fsa | ❌ FAIL |
-| Witness can't see hook file | Uses bd list not .gt-hook | gm-2f4 | ⚠️ PARTIAL |
+| ~~Witness hook tracking~~ | ~~Uses bd list not .gt-hook~~ | gm-2f4 | ✅ FIXED |
 
 ### Test Results (2026-01-05)
 
@@ -533,13 +533,13 @@ Reference from Steve Yegge's Gas Town article. Use these to verify agents are wo
 - gt-sling-fix creates: `gt-RIG-NAME`
 - **Workaround**: Use `tmux send-keys -t gt-RIG-NAME "message" Enter`
 
-**Witness Patrol (gm-2f4): ⚠️ PARTIAL**
+**Witness Patrol (gm-2f4): ✅ FIXED**
 - Witness patrol works when triggered via `gt prime`
 - Correctly detects stuck polecat at INSERT mode
 - Nudges via tmux send-keys
 - Checks for ready work
 - **Not tested**: Auto-spawn (no rig-specific beads available)
-- **Found bug**: Witness doesn't see hook file content (fd-5lb) - discrepancy in hook tracking
+- **Fixed (gm-d2e)**: assigneeID() format mismatch - now shows hooked beads correctly
 
 **Polecat Bead Progress (gm-fsa): ❌ FAIL**
 - fd-5lb hooked to furiosa but status=hooked (not in_progress)
