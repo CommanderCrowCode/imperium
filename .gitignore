@@ -60,3 +60,30 @@
 # bv (beads viewer) local config and caches
 .bv/
 .runtime/
+
+# =============================================================================
+# Gas Town runtime state (local session data)
+# =============================================================================
+.events.jsonl
+.feed.jsonl
+.claude/
+
+# Rig directories (local Git Town state, not tracked)
+/10x_screening/
+/flamingo_dominion/
+/lumicello_inventory/
+/lumicello_website/
+/tanwa_info/
+/tools_cc_monitor/
+
+# Gas Town daemon infrastructure
+/daemon/
+/deacon/
+/spawn/
+/plugins/
+/backups/
+/logs/
+/commander_crow/
+
+# Beads notes (local note-taking)
+.beads/notes/

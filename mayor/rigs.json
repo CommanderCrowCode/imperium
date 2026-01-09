@@ -9,6 +9,14 @@
         "prefix": "1s"
       }
     },
+    "commander_crow": {
+      "git_url": "git@github.com:CommanderCrowCode/commander_crow.git",
+      "added_at": "2026-01-09T20:52:41.556458+07:00",
+      "beads": {
+        "repo": "",
+        "prefix": "cc"
+      }
+    },
     "flamingo_dominion": {
       "git_url": "git@github.com:CommanderCrowCode/dominion.git",
       "added_at": "2026-01-04T23:46:14.075912+07:00",
