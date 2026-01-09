@@ -1,0 +1,65 @@
+# Formula: crash-test-workflow
+# Type: workflow
+# Created by: gt formula create
+
+description = """Crash recovery test workflow.
+
+A multi-step workflow for testing polecat crash recovery.
+Each step creates a marker file to prove completion."""
+formula = "crash-test-workflow"
+version = 1
+
+# Step 1: Initialize
+[[steps]]
+id = "init"
+title = "Initialize crash test"
+description = """
+Create initial marker file.
+
+**Action:**
+Create /tmp/crash-test-step1.txt with timestamp
+"""
+
+# Step 2: Middle step (depends on init)
+[[steps]]
+id = "middle"
+title = "Middle checkpoint"
+needs = ["init"]
+description = """
+Create middle checkpoint marker.
+
+**Action:**
+Create /tmp/crash-test-step2.txt with timestamp
+Wait 5 seconds (allows time to kill polecat)
+"""
+
+# Step 3: Final step (depends on middle)
+[[steps]]
+id = "final"
+title = "Final checkpoint"
+needs = ["middle"]
+description = """
+Create final marker.
+
+**Action:**
+Create /tmp/crash-test-step3.txt with timestamp
+"""
+
+# Step 4: Complete (depends on final)
+[[steps]]
+id = "complete"
+title = "Complete test"
+needs = ["final"]
+description = """
+Mark test complete.
+
+**Action:**
+Create /tmp/crash-test-complete.txt with all step timestamps
+"""
+
+# Variables
+[vars]
+[vars.test_run]
+description = "Test run identifier"
+required = false
+default = "run1"
