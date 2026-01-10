@@ -1,0 +1,38 @@
+Delegation fails instantly
+without context.
+
+AI isn't dumb—
+but it doesn't know you
+if you've never told it who you are.
+
+Without context,
+AI responds to you like it responds to everyone else.
+
+That's why I obsessively focus on one thing:
+
+Capture context DURING work, not after it's done.
+
+What I capture:
+    •    Requirements & constraints
+    •    Decisions + reasoning
+    •    Work roadmaps
+    •    Family logistics
+    •    Tech stack / infrastructure choices
+
+Everything must be in a format
+AI can consume immediately.
+
+Version control matters—not just for code.
+Because AI doesn't just read "current state."
+It reads the evolution of your decisions.
+
+Git works for code.
+But the same principle applies to:
+    •    Meeting notes
+    •    Design docs
+    •    Decision logs
+
+Direct questions for you:
+
+Where is your context right now?
+How well does AI actually know you?
