@@ -2,8 +2,9 @@
 # gt-spawn-agent: Spawn any Gas Town agent with GUPP auto-execute
 # Usage: gt-spawn-agent <agent-dir> [session-name]
 #
-# This uses the GUPP fix: pipe "gt prime" directly to Claude
-# so it auto-executes immediately without waiting at INSERT prompt
+# This uses the GUPP fix: send "gt prime" via tmux send-keys
+# with proper vim-mode handling (Escape + Enter) so it auto-executes
+# immediately without getting stuck at INSERT prompt
 
 set -e
 
@@ -49,10 +50,14 @@ if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     sleep 1
 fi
 
-# Spawn with GUPP fix: pipe gt prime directly
+# Spawn with vim-mode-safe GUPP fix
 echo "🚀 Spawning $SESSION_NAME with GUPP auto-execute..."
-tmux new-session -d -s "$SESSION_NAME" "cd $AGENT_DIR && echo 'gt prime' | claude --dangerously-skip-permissions"
-echo "✅ Spawned: $SESSION_NAME (auto-executing)"
+
+# Start Claude in the agent directory
+# SessionStart hook will automatically run "gt prime" - no manual input needed
+tmux new-session -d -s "$SESSION_NAME" "cd $AGENT_DIR && claude --dangerously-skip-permissions"
+
+echo "✅ Spawned: $SESSION_NAME (auto-executing, vim-mode compatible)"
 echo ""
 echo "To attach:"
 echo "  tmux attach -t $SESSION_NAME"
