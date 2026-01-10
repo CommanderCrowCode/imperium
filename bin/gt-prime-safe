@@ -44,11 +44,14 @@ else
 fi
 
 # Check for hooked work (read .gt-hook file directly, no gt command)
+# Check both current directory and parent (for nested worktrees)
 HOOK_FILE=".gt-hook"
 HOOKED_BEAD=""
 
 if [ -f "$HOOK_FILE" ]; then
     HOOKED_BEAD=$(cat "$HOOK_FILE" | tr -d '\n')
+elif [ -f "../$HOOK_FILE" ]; then
+    HOOKED_BEAD=$(cat "../$HOOK_FILE" | tr -d '\n')
 fi
 
 # Output startup context
