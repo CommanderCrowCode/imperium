@@ -499,6 +499,7 @@ Reference from Steve Yegge's Gas Town article. Use these to verify agents are wo
 | Gap | Workaround | Tracking | Test Status |
 |-----|------------|----------|-------------|
 | ~~`gt hook` assignee format~~ | ~~Use `~/gt/bin/gt-hook-fix`~~ | gm-d2e | ✅ FIXED |
+| ~~Polecats detect as Mayor identity~~ | ~~Use `gt-prime-safe` in spawn scripts~~ | gm-6uv5 | ✅ FIXED |
 | `gt sling` doesn't spawn session | Use `~/gt/bin/gt-sling-fix` | gm-gah | ⚠️ Known |
 | Witness doesn't auto-spawn | Mayor uses gt-sling-fix | gm-gah | ⚠️ Known |
 | ~~GUPP: Polecats don't auto-execute~~ | ~~Piped input: `echo "gt prime" \| claude`~~ | gm-6yi | ✅ FIXED |
@@ -516,6 +517,13 @@ Reference from Steve Yegge's Gas Town article. Use these to verify agents are wo
 - Solution: Pipe input directly on spawn: `echo "gt prime" | claude --dangerously-skip-permissions`
 - Scripts updated: `~/gt/bin/gt-sling-fix`, `~/gt/bin/gt-spawn-agent`
 - All polecats and witnesses now auto-execute on spawn
+
+**Polecat Identity Detection (gm-6uv5): ✅ FIXED (2026-01-10)**
+- Root cause: `gt prime` cd's to ~/gt before detecting identity, polecats loaded Mayor context
+- Solution: Created `gt-prime-safe` script that detects identity from CWD, checks .gt-hook directly
+- Scripts updated: `~/gt/bin/gt-prime-safe` (new), `~/gt/bin/gt-spawn-agent`, `~/gt/bin/gt-sling-fix`
+- Tested: polecat, mayor, witness, crew roles all detect correctly
+- Impact: Polecats now receive correct context on startup and execute hooked work via GUPP
 
 **Witness Stuck Detection (gm-uxw): ❌ FAIL**
 - Witness reports polecat as "working" when actually stuck/idle
