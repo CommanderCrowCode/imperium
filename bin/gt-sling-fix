@@ -31,7 +31,7 @@ echo ""
 # Check if polecat exists
 if [ ! -d "$POLECAT_DIR" ]; then
     echo "Creating polecat $POLECAT_NAME..."
-    gt polecat add "$RIG" "$POLECAT_NAME" 2>&1 || true
+    gt polecat add "$RIG" "$POLECAT_NAME" 2>/dev/null || true
 fi
 
 # Verify polecat directory exists (handle both flat and nested structures)
