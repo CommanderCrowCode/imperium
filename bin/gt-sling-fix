@@ -31,16 +31,26 @@ echo ""
 # Check if polecat exists
 if [ ! -d "$POLECAT_DIR" ]; then
     echo "Creating polecat $POLECAT_NAME..."
-    gt polecat add "$RIG" "$POLECAT_NAME" --naked 2>/dev/null || true
+    gt polecat add "$RIG" "$POLECAT_NAME" 2>&1 || true
 fi
 
-# Verify polecat directory exists
+# Verify polecat directory exists (handle both flat and nested structures)
+# New gt polecat add creates: polecats/NAME/RIG_NAME/
+# Old structure: polecats/NAME/
 if [ ! -d "$POLECAT_DIR" ]; then
     echo "ERROR: Failed to create polecat directory: $POLECAT_DIR"
     exit 1
 fi
 
-# Ensure beads redirect exists in polecat
+# Check for nested worktree structure and use that as working directory
+if [ -d "$POLECAT_DIR/$RIG" ]; then
+    WORK_DIR="$POLECAT_DIR/$RIG"
+    echo "Using nested worktree: $WORK_DIR"
+else
+    WORK_DIR="$POLECAT_DIR"
+fi
+
+# Ensure beads redirect exists in polecat root (not the nested worktree)
 if [ ! -f "$POLECAT_DIR/.beads/redirect" ]; then
     mkdir -p "$POLECAT_DIR/.beads"
     echo "../../mayor/rig/.beads" > "$POLECAT_DIR/.beads/redirect"
@@ -66,7 +76,7 @@ role_bead: gt-polecat-role" --force 2>/dev/null || true
 fi
 
 # Unhook any existing beads assigned to this polecat
-cd "$POLECAT_DIR"
+cd "$WORK_DIR"
 echo "Checking for existing hooked beads..."
 EXISTING_HOOKED=$(bd list --status=hooked --assignee="$AGENT_ID" --json 2>/dev/null | jq -r '.[].id' 2>/dev/null || true)
 for OLD_BEAD in $EXISTING_HOOKED; do
@@ -109,7 +119,7 @@ fi
 echo "🚀 Spawning polecat session with GUPP auto-execute..."
 # GUPP FIX: Pipe "gt prime" directly to Claude so it auto-executes on startup
 # This bypasses the INSERT prompt wait issue
-tmux new-session -d -s "$SESSION_NAME" "cd $POLECAT_DIR && echo 'gt prime' | claude --dangerously-skip-permissions"
+tmux new-session -d -s "$SESSION_NAME" "cd $WORK_DIR && echo 'gt prime' | claude --dangerously-skip-permissions"
 echo "✓ Spawned: $SESSION_NAME"
 echo "✅ Polecat auto-executing via piped input (GUPP fix)"
 

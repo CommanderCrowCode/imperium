@@ -1,0 +1,48 @@
+#!/bin/bash
+# gt-town-start: Complete Gas Town startup (gt up + workarounds)
+#
+# This wraps 'gt up' and starts additional workaround services that
+# aren't part of official Gas Town but are needed for stable operation.
+#
+# Usage:
+#   ~/gt/bin/gt-town-start
+#
+# To make this run at login:
+#   echo '~/gt/bin/gt-town-start' >> ~/.zshrc
+
+set -e
+
+echo "🏙️  Starting Gas Town..."
+echo ""
+
+# Start core Gas Town services
+echo "1️⃣  Starting core services (gt start)..."
+gt start
+
+echo ""
+
+# Start workarounds/hacks
+echo "2️⃣  Starting workaround services..."
+
+# HACK: Auto-enter for stuck agent prompts
+# See bead gm-2ehf for why this is needed and when to remove
+if [ -f ~/gt/bin/gt-auto-enter ]; then
+    if ~/gt/bin/gt-auto-enter status >/dev/null 2>&1; then
+        echo "   ✅ gt-auto-enter already running"
+    else
+        ~/gt/bin/gt-auto-enter start
+        echo "   ✅ gt-auto-enter started (workaround for stuck prompts)"
+    fi
+else
+    echo "   ⚠️  gt-auto-enter not found - agents may get stuck at prompts"
+fi
+
+echo ""
+echo "✅ Gas Town fully started"
+echo ""
+echo "Services:"
+echo "  • Core: gt status"
+echo "  • Auto-enter: ~/gt/bin/gt-auto-enter status"
+echo ""
+echo "To stop everything:"
+echo "  gt shutdown && ~/gt/bin/gt-auto-enter stop"

@@ -1,0 +1,126 @@
+#!/bin/bash
+# gt-auto-enter: Auto-press Enter for Gas Town agents stuck at prompt
+#
+# This solves the problem where agents type messages but don't press Enter.
+# It watches all gt-* sessions and auto-sends Enter when it detects typed
+# text waiting at the prompt.
+#
+# Usage:
+#   gt-auto-enter start    # Start in background
+#   gt-auto-enter stop     # Stop background process
+#   gt-auto-enter status   # Check if running
+#   gt-auto-enter run      # Run in foreground (for debugging)
+
+PIDFILE="$HOME/.gt-auto-enter.pid"
+LOGFILE="$HOME/.gt-auto-enter.log"
+
+start_daemon() {
+    if [ -f "$PIDFILE" ] && kill -0 $(cat "$PIDFILE") 2>/dev/null; then
+        echo "❌ gt-auto-enter already running (PID $(cat "$PIDFILE"))"
+        exit 1
+    fi
+
+    echo "🚀 Starting gt-auto-enter daemon..."
+    nohup "$0" run >> "$LOGFILE" 2>&1 &
+    echo $! > "$PIDFILE"
+    echo "✅ Started gt-auto-enter (PID $!)"
+    echo "   Logs: $LOGFILE"
+    echo "   To stop: $0 stop"
+}
+
+stop_daemon() {
+    if [ ! -f "$PIDFILE" ]; then
+        echo "❌ gt-auto-enter not running (no PID file)"
+        exit 1
+    fi
+
+    PID=$(cat "$PIDFILE")
+    if kill -0 "$PID" 2>/dev/null; then
+        echo "🛑 Stopping gt-auto-enter (PID $PID)..."
+        kill "$PID"
+        rm -f "$PIDFILE"
+        echo "✅ Stopped"
+    else
+        echo "❌ Process $PID not found (cleaning up stale PID file)"
+        rm -f "$PIDFILE"
+    fi
+}
+
+status_daemon() {
+    if [ -f "$PIDFILE" ] && kill -0 $(cat "$PIDFILE") 2>/dev/null; then
+        PID=$(cat "$PIDFILE")
+        echo "✅ gt-auto-enter is running (PID $PID)"
+        echo "   Logs: tail -f $LOGFILE"
+        return 0
+    else
+        echo "❌ gt-auto-enter is not running"
+        return 1
+    fi
+}
+
+run_watcher() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] gt-auto-enter started"
+
+    # Simple approach: track last state per session in temp files
+    STATEDIR="/tmp/gt-auto-enter-state"
+    mkdir -p "$STATEDIR"
+
+    while true; do
+        # Get all gt-* sessions, excluding crew (human-controlled) and mayor (human-controlled)
+        sessions=$(tmux list-sessions 2>/dev/null | grep "^gt-" | cut -d: -f1 | grep -v -E "crew|hq-mayor")
+
+        for session in $sessions; do
+            # Capture last few lines of the session
+            output=$(tmux capture-pane -t "$session" -p 2>/dev/null | tail -5)
+
+            # Check if there's text at the prompt (not INSERT mode, not empty)
+            # Pattern: "❯ [some text]" at the end, without "-- INSERT --"
+            if echo "$output" | grep -q "❯.*[a-zA-Z]" && ! echo "$output" | grep -q "INSERT"; then
+                # Get the prompt line as state fingerprint
+                prompt_line=$(echo "$output" | grep "❯" | tail -1)
+
+                # Create safe filename from session name
+                session_file="$STATEDIR/$(echo "$session" | tr '/' '_')"
+
+                # Check if this is a new state
+                if [ ! -f "$session_file" ] || [ "$(cat "$session_file" 2>/dev/null)" != "$prompt_line" ]; then
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🔄 Sending Enter to $session"
+                    tmux send-keys -t "$session" Enter 2>/dev/null
+                    echo "$prompt_line" > "$session_file"
+                fi
+            else
+                # Clear state when session is at clean prompt or working
+                session_file="$STATEDIR/$(echo "$session" | tr '/' '_')"
+                rm -f "$session_file" 2>/dev/null
+            fi
+        done
+
+        # Check every 2 seconds (balance between responsiveness and CPU usage)
+        sleep 2
+    done
+}
+
+case "${1:-}" in
+    start)
+        start_daemon
+        ;;
+    stop)
+        stop_daemon
+        ;;
+    status)
+        status_daemon
+        ;;
+    run)
+        run_watcher
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|status|run}"
+        echo ""
+        echo "Commands:"
+        echo "  start   - Start auto-enter daemon in background"
+        echo "  stop    - Stop auto-enter daemon"
+        echo "  status  - Check if daemon is running"
+        echo "  run     - Run in foreground (for debugging)"
+        exit 1
+        ;;
+esac
