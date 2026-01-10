@@ -50,12 +50,13 @@ if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     sleep 1
 fi
 
-# Spawn with vim-mode-safe GUPP fix
+# Spawn with identity-bug-safe GUPP fix
 echo "🚀 Spawning $SESSION_NAME with GUPP auto-execute..."
 
-# Start Claude in the agent directory
-# SessionStart hook will automatically run "gt prime" - no manual input needed
-tmux new-session -d -s "$SESSION_NAME" "cd $AGENT_DIR && claude --dangerously-skip-permissions"
+# Start Claude in the agent directory and pipe gt-prime-safe
+# This avoids the identity bug (gt prime cd's to ~/gt before detecting role)
+# gt-prime-safe detects identity from CWD, checks .gt-hook, and activates GUPP
+tmux new-session -d -s "$SESSION_NAME" "cd $AGENT_DIR && ~/gt/bin/gt-prime-safe | claude --dangerously-skip-permissions"
 
 echo "✅ Spawned: $SESSION_NAME (auto-executing, vim-mode compatible)"
 echo ""

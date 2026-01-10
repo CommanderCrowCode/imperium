@@ -117,9 +117,9 @@ if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
 fi
 
 echo "🚀 Spawning polecat session with GUPP auto-execute..."
-# GUPP FIX: Pipe "gt prime" directly to Claude so it auto-executes on startup
-# This bypasses the INSERT prompt wait issue
-tmux new-session -d -s "$SESSION_NAME" "cd $WORK_DIR && echo 'gt prime' | claude --dangerously-skip-permissions"
+# GUPP FIX: Pipe gt-prime-safe to Claude (avoids identity bug from gt prime)
+# gt-prime-safe detects identity from CWD, not ~/gt, and triggers GUPP if work is hooked
+tmux new-session -d -s "$SESSION_NAME" "cd $WORK_DIR && ~/gt/bin/gt-prime-safe | claude --dangerously-skip-permissions"
 echo "✓ Spawned: $SESSION_NAME"
 echo "✅ Polecat auto-executing via piped input (GUPP fix)"
 

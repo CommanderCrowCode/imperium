@@ -1,0 +1,83 @@
+#!/bin/bash
+# gt-prime-safe: Safe identity detection without cd ~/gt
+#
+# This replaces "gt prime" for polecat startup to avoid the identity bug.
+# Unlike gt prime (which cd's to ~/gt), this detects role from current directory.
+#
+# Usage: Run from agent directory as part of SessionStart
+#   cd <agent-dir> && gt-prime-safe
+
+set -e
+
+# Detect agent identity from current directory (before any cd)
+PWD_PATH=$(pwd)
+GT_ROOT="/Users/tanwa/gt"
+
+# Parse role from directory structure
+if [[ "$PWD_PATH" =~ $GT_ROOT/([^/]+)/(polecats|crew)/([^/]+) ]]; then
+    RIG="${BASH_REMATCH[1]}"
+    ROLE_TYPE="${BASH_REMATCH[2]}"
+    NAME="${BASH_REMATCH[3]}"
+    AGENT_ID="${RIG}/${ROLE_TYPE}/${NAME}"
+    ROLE="polecat"  # crew also uses polecat context
+elif [[ "$PWD_PATH" =~ $GT_ROOT/([^/]+)/(witness) ]]; then
+    RIG="${BASH_REMATCH[1]}"
+    AGENT_ID="${RIG}/witness"
+    ROLE="witness"
+elif [[ "$PWD_PATH" =~ $GT_ROOT/([^/]+)/(refinery) ]]; then
+    RIG="${BASH_REMATCH[1]}"
+    AGENT_ID="${RIG}/refinery"
+    ROLE="refinery"
+elif [[ "$PWD_PATH" == "$GT_ROOT/mayor" ]] || [[ "$PWD_PATH" =~ $GT_ROOT/mayor/ ]]; then
+    AGENT_ID="mayor/"
+    ROLE="mayor"
+elif [[ "$PWD_PATH" == "$GT_ROOT/deacon" ]] || [[ "$PWD_PATH" =~ $GT_ROOT/deacon/ ]]; then
+    AGENT_ID="deacon/"
+    ROLE="deacon"
+elif [[ "$PWD_PATH" =~ $GT_ROOT/boot ]]; then
+    AGENT_ID="boot/"
+    ROLE="boot"
+else
+    # Unknown location - default to town root behavior
+    AGENT_ID="unknown"
+    ROLE="unknown"
+fi
+
+# Check for hooked work (read .gt-hook file directly, no gt command)
+HOOK_FILE=".gt-hook"
+HOOKED_BEAD=""
+
+if [ -f "$HOOK_FILE" ]; then
+    HOOKED_BEAD=$(cat "$HOOK_FILE" | tr -d '\n')
+fi
+
+# Output startup context
+echo "# Gas Town Startup Context"
+echo ""
+echo "**Agent**: $AGENT_ID"
+echo "**Role**: $ROLE"
+echo "**Directory**: $PWD_PATH"
+echo ""
+
+if [ -n "$HOOKED_BEAD" ]; then
+    echo "**Hooked Work**: $HOOKED_BEAD"
+    echo ""
+    echo "🪝 **GUPP ACTIVATED**: Work is hooked. Checking bead details..."
+    echo ""
+
+    # Show bead info (if bd command works)
+    if command -v bd &> /dev/null; then
+        bd show "$HOOKED_BEAD" 2>/dev/null || echo "⚠️  Could not fetch bead details"
+    fi
+
+    echo ""
+    echo "**Action**: Begin work on $HOOKED_BEAD immediately (GUPP protocol)"
+else
+    echo "**Hooked Work**: None"
+    echo ""
+    echo "**Action**: Check mail for assignments: \`gt mail inbox\`"
+fi
+
+echo ""
+echo "---"
+echo ""
