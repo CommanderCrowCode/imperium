@@ -25,6 +25,14 @@
         "prefix": "fd"
       }
     },
+    "lumicello_big_garden": {
+      "git_url": "git@github.com:CommanderCrowCode/big_garden.git",
+      "added_at": "2026-01-12T11:40:22.028665+07:00",
+      "beads": {
+        "repo": "",
+        "prefix": "lbg"
+      }
+    },
     "lumicello_inventory": {
       "git_url": "git@github.com:CommanderCrowCode/inventory_management.git",
       "added_at": "2026-01-04T23:32:36.858565+07:00",
@@ -55,6 +63,14 @@
       "beads": {
         "repo": "",
         "prefix": "tcm"
+      }
+    },
+    "watchtower": {
+      "git_url": "https://github.com/CommanderCrowCode/watchtower",
+      "added_at": "2026-01-12T12:13:04.456204+07:00",
+      "beads": {
+        "repo": "",
+        "prefix": "wa"
       }
     }
   }

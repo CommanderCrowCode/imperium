@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Gas Town Restart Script
+# Run this outside tmux sessions after Claude Code upgrades
+
+set -e
+
+echo "🔄 Gas Town Restart"
+echo "=================="
+echo ""
+
+# 1. Kill all Gas Town sessions
+echo "📍 Step 1: Killing all Gas Town sessions..."
+SESSIONS=$(tmux list-sessions 2>/dev/null | grep "^gt-" | cut -d: -f1 || true)
+if [ -n "$SESSIONS" ]; then
+  echo "$SESSIONS" | while read -r session; do
+    echo "  ❌ Killing: $session"
+    tmux kill-session -t "$session" 2>/dev/null || true
+  done
+else
+  echo "  ℹ️  No Gas Town sessions found"
+fi
+
+sleep 2
+
+# 2. Verify all killed
+echo ""
+echo "📍 Step 2: Verifying cleanup..."
+REMAINING=$(tmux list-sessions 2>/dev/null | grep "^gt-" | wc -l || echo "0")
+if [ "$REMAINING" -eq 0 ]; then
+  echo "  ✅ All sessions killed"
+else
+  echo "  ⚠️  Warning: $REMAINING sessions still running"
+  tmux list-sessions 2>/dev/null | grep "^gt-" || true
+fi
+
+# 3. Restart core infrastructure
+echo ""
+echo "📍 Step 3: Restarting core infrastructure..."
+echo "  🚀 Starting deacon..."
+~/gt/bin/gt-spawn-agent deacon
+sleep 1
+
+echo "  🚀 Starting boot..."
+~/gt/bin/gt-spawn-agent boot
+sleep 1
+
+# 4. Restart per-rig witnesses and refineries
+echo ""
+echo "📍 Step 4: Restarting rig infrastructure..."
+for rig in tanwa_info 10x_screening lumicello_inventory lumicello_website flamingo_dominion tools_cc_monitor agentic_life; do
+  echo "  🔧 $rig:"
+  echo "    🦉 witness..."
+  ~/gt/bin/gt-spawn-agent "$rig/witness"
+  sleep 0.5
+  echo "    🏭 refinery..."
+  ~/gt/bin/gt-spawn-agent "$rig/refinery"
+  sleep 0.5
+done
+
+# 5. Summary
+echo ""
+echo "📍 Step 5: Verifying restart..."
+RUNNING=$(tmux list-sessions 2>/dev/null | grep "^gt-" | wc -l || echo "0")
+echo "  ✅ $RUNNING Gas Town sessions running"
+echo ""
+echo "🎉 Gas Town restart complete!"
+echo ""
+echo "Notes:"
+echo "  - Polecats not restarted (spawn on-demand via gt-sling-fix)"
+echo "  - Check status: tmux list-sessions | grep '^gt-'"
+echo "  - Attach to any: tmux attach -t gt-<name>"
