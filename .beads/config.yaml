@@ -52,6 +52,13 @@
 #     - ~/beads-planning  # Personal planning repo
 #     - ~/work-planning   # Work planning repo
 
+# Gas Town Polecat Management
+# Global limit on concurrent polecats (excludes infrastructure: refineries, witnesses, etc.)
+# Set via GT_MAX_POLECATS environment variable (default: 20)
+# Enforced by gt-sling-fix and gt-spawn-agent
+# Recommended: 20 for 24GB RAM systems (leaves ~7GB for user)
+# gt-max-polecats: 20
+
 # Integration settings (access with 'bd config get/set')
 # These are stored in the database, not in this file:
 # - jira.url
