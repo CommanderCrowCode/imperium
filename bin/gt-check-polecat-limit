@@ -1,0 +1,44 @@
+#!/bin/bash
+# gt-check-polecat-limit: Check if spawning a new polecat would exceed global limit
+# Returns: 0 (OK to spawn), 1 (at limit), 2 (error)
+# Usage: gt-check-polecat-limit
+
+set -e
+
+# Get limit from config or env (default: 20)
+MAX_POLECATS=${GT_MAX_POLECATS:-20}
+
+# Count current polecats (exclude infrastructure: refineries, witnesses, deacon, boot, crew, commander_crow)
+CURRENT=$(tmux ls 2>/dev/null | \
+    grep "^gt-.*-" | \
+    grep -v "refinery" | \
+    grep -v "witness" | \
+    grep -v "boot" | \
+    grep -v "deacon" | \
+    grep -v "crew-" | \
+    grep -v "commander_crow" | \
+    wc -l | \
+    tr -d ' ')
+
+if [ "$CURRENT" -ge "$MAX_POLECATS" ]; then
+    echo "⚠️  Polecat limit reached: $CURRENT/$MAX_POLECATS"
+    echo ""
+    echo "Current polecats:"
+    tmux ls 2>/dev/null | \
+        grep "^gt-.*-" | \
+        grep -v "refinery" | \
+        grep -v "witness" | \
+        grep -v "boot" | \
+        grep -v "deacon" | \
+        grep -v "crew-" | \
+        grep -v "commander_crow" | \
+        cut -d: -f1 | \
+        sort
+    echo ""
+    echo "To increase limit: export GT_MAX_POLECATS=<number>"
+    echo "To cleanup: kill idle polecats with closed/hooked beads"
+    exit 1
+fi
+
+echo "✓ Polecat count OK: $CURRENT/$MAX_POLECATS ($(($MAX_POLECATS - $CURRENT)) slots free)"
+exit 0

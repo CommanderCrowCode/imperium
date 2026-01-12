@@ -116,6 +116,16 @@ if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     sleep 1
 fi
 
+# Check global polecat limit before spawning
+if ! ~/gt/bin/gt-check-polecat-limit 2>&1; then
+    echo ""
+    echo "❌ Cannot spawn: Global polecat limit reached"
+    echo "   Work is hooked but polecat not started"
+    echo "   To spawn manually when capacity available:"
+    echo "     ~/gt/bin/gt-spawn-agent $WORK_DIR"
+    exit 1
+fi
+
 echo "🚀 Spawning polecat session with GUPP auto-execute..."
 # GUPP FIX: Pipe gt-prime-safe to Claude (avoids identity bug from gt prime)
 # gt-prime-safe detects identity from CWD, not ~/gt, and triggers GUPP if work is hooked

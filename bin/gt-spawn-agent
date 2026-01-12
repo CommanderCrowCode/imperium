@@ -50,6 +50,17 @@ if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
     sleep 1
 fi
 
+# Check global polecat limit (skip for infrastructure: refinery, witness, deacon, boot)
+if [[ "$SESSION_NAME" =~ gt-.*-(refinery|witness|deacon|boot) ]] || [[ "$SESSION_NAME" =~ commander_crow ]] || [[ "$SESSION_NAME" =~ crew- ]]; then
+    echo "ℹ️  Infrastructure agent - skipping limit check"
+else
+    if ! ~/gt/bin/gt-check-polecat-limit 2>&1; then
+        echo ""
+        echo "❌ Cannot spawn: Global polecat limit reached"
+        exit 1
+    fi
+fi
+
 # Spawn with identity-bug-safe GUPP fix
 echo "🚀 Spawning $SESSION_NAME with GUPP auto-execute..."
 
