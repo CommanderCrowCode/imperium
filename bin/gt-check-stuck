@@ -1,0 +1,172 @@
+#!/bin/bash
+# gt-check-stuck: Check all polecats in a rig for stuck sessions and nudge them
+#
+# This is the main script for Witness patrol stuck detection.
+# It checks each polecat in the rig using gt-session-activity and
+# optionally sends nudges to stuck sessions.
+#
+# Usage: gt-check-stuck <rig> [--nudge] [--threshold <minutes>] [--decommission]
+#
+# Options:
+#   --nudge        Send nudge message to stuck sessions
+#   --threshold    Minutes of inactivity before considering stuck (default: 5)
+#   --decommission Also check and execute auto-decommission for finished polecats
+#
+# Output:
+#   Lists each polecat and its activity status
+#   If --nudge, sends messages via tmux send-keys to stuck sessions
+#   If --decommission, removes polecats with closed beads
+#
+# Exit codes:
+#   0 - All polecats healthy or nudged
+#   1 - Error (rig not found, etc.)
+#   2 - Found stuck polecats (without --nudge)
+
+set -e
+
+# Parse arguments
+RIG=""
+NUDGE=false
+DECOMMISSION=false
+THRESHOLD_MINUTES=5
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --nudge)
+            NUDGE=true
+            shift
+            ;;
+        --decommission)
+            DECOMMISSION=true
+            shift
+            ;;
+        --threshold)
+            THRESHOLD_MINUTES="$2"
+            shift 2
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            RIG="$1"
+            shift
+            ;;
+    esac
+done
+
+if [ -z "$RIG" ]; then
+    echo "Usage: gt-check-stuck <rig> [--nudge] [--threshold <minutes>] [--decommission]" >&2
+    exit 1
+fi
+
+GT_ROOT="${HOME}/gt"
+RIG_DIR="${GT_ROOT}/${RIG}"
+
+if [ ! -d "$RIG_DIR" ]; then
+    echo "ERROR: Rig not found: $RIG_DIR" >&2
+    exit 1
+fi
+
+POLECATS_DIR="${RIG_DIR}/polecats"
+if [ ! -d "$POLECATS_DIR" ]; then
+    echo "No polecats directory in $RIG" >&2
+    exit 0
+fi
+
+# Activity check script
+ACTIVITY_SCRIPT="${GT_ROOT}/bin/gt-session-activity"
+if [ ! -x "$ACTIVITY_SCRIPT" ]; then
+    echo "ERROR: gt-session-activity not found or not executable" >&2
+    exit 1
+fi
+
+# Find all polecats
+POLECATS=$(ls "$POLECATS_DIR" 2>/dev/null | grep -v "^\\." || echo "")
+if [ -z "$POLECATS" ]; then
+    echo "No polecats found in $RIG"
+    exit 0
+fi
+
+echo "=== Checking polecats in $RIG (threshold: ${THRESHOLD_MINUTES}m) ==="
+echo ""
+
+FOUND_STUCK=false
+
+for POLECAT in $POLECATS; do
+    AGENT="${RIG}/${POLECAT}"
+
+    # Check if session exists
+    SESSION_NAME="gt-${RIG}-${POLECAT}"
+    if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+        echo "  ⚫ $POLECAT - no session"
+        continue
+    fi
+
+    # Run activity check
+    RESULT=$("$ACTIVITY_SCRIPT" "$AGENT" --threshold "$THRESHOLD_MINUTES" --json 2>&1) || true
+    EXIT_CODE=$?
+
+    # Parse JSON output
+    STATE=$(echo "$RESULT" | grep -o '"state": *"[^"]*"' | cut -d'"' -f4)
+    LAST_ACTIVITY=$(echo "$RESULT" | grep -o '"last_activity_secs": *[0-9]*' | grep -o '[0-9]*$')
+    INDICATORS=$(echo "$RESULT" | grep -o '"indicators": *\[[^]]*\]' | sed 's/"indicators": //')
+
+    # Format activity time
+    if [ "$LAST_ACTIVITY" -gt 60 ]; then
+        ACTIVITY_STR="$((LAST_ACTIVITY / 60))m ago"
+    else
+        ACTIVITY_STR="${LAST_ACTIVITY}s ago"
+    fi
+
+    case "$STATE" in
+        "active")
+            echo "  ✅ $POLECAT - active (last: ${ACTIVITY_STR})"
+            ;;
+        "idle")
+            echo "  ⏸️  $POLECAT - idle (last: ${ACTIVITY_STR})"
+            ;;
+        "stuck")
+            FOUND_STUCK=true
+            echo "  🔴 $POLECAT - STUCK (last: ${ACTIVITY_STR})"
+
+            if $NUDGE; then
+                echo "     ↳ Sending nudge..."
+                # Send nudge via tmux
+                NUDGE_MSG="🔔 WITNESS: Session appears stuck (${ACTIVITY_STR} idle). Are you still working? If you're done, run \`gt done\` or \`gt handoff\`."
+                tmux send-keys -t "$SESSION_NAME" "$NUDGE_MSG" Enter 2>/dev/null || echo "     ↳ Failed to send nudge"
+                echo "     ↳ Nudge sent"
+            fi
+            ;;
+        "waiting_approval")
+            echo "  ⏳ $POLECAT - waiting for approval"
+            ;;
+        *)
+            echo "  ❓ $POLECAT - $STATE"
+            ;;
+    esac
+done
+
+echo ""
+
+if $FOUND_STUCK && ! $NUDGE; then
+    echo "⚠️  Found stuck polecats. Use --nudge to send messages."
+fi
+
+# Run decommission check if requested
+if $DECOMMISSION; then
+    echo ""
+    echo "=== Auto-Decommission Check ==="
+    DECOM_SCRIPT="${GT_ROOT}/bin/gt-decommission-check"
+    if [ -x "$DECOM_SCRIPT" ]; then
+        "$DECOM_SCRIPT" "$RIG" --execute || true
+    else
+        echo "⚠️  gt-decommission-check not found or not executable"
+    fi
+fi
+
+if $FOUND_STUCK && ! $NUDGE; then
+    exit 2
+fi
+
+exit 0

@@ -64,8 +64,12 @@ BEAD_PREFIX=$(echo "$BEAD_ID" | cut -d'-' -f1)
 AGENT_BEAD_ID="${BEAD_PREFIX}-${RIG}-polecat-${POLECAT_NAME}"
 if ! bd show "$AGENT_BEAD_ID" &>/dev/null; then
     echo "Creating agent bead: $AGENT_BEAD_ID"
-    bd create --id="$AGENT_BEAD_ID" --type=agent \
+    # NOTE: Using --type=task because 'agent' type causes validation errors
+    # Agent beads were designed for Gas Town but the type isn't validated properly
+    # See gm-80q9 for details
+    bd create --id="$AGENT_BEAD_ID" --type=task \
         --title="Polecat $POLECAT_NAME for $RIG" \
+        --labels="gas-town-agent,role:polecat" \
         --description="$AGENT_BEAD_ID
 
 role_type: polecat

@@ -1,0 +1,200 @@
+#!/bin/bash
+# gt-decommission-check: Check if polecats should be decommissioned
+#
+# Polecats are ephemeral - they should be decommissioned when:
+# 1. Their hooked bead is closed (work is done)
+# 2. No open PRs on their branch (or PR merged)
+#
+# Usage: gt-decommission-check <rig> [--execute] [--all-rigs]
+#
+# Options:
+#   --execute   Actually decommission (default: dry-run)
+#   --all-rigs  Check all rigs in the town
+#
+# Exit codes:
+#   0 - Success (or no candidates found)
+#   1 - Error
+
+set -e
+
+GT_ROOT="${HOME}/gt"
+EXECUTE=false
+ALL_RIGS=false
+RIG=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --execute)
+            EXECUTE=true
+            shift
+            ;;
+        --all-rigs)
+            ALL_RIGS=true
+            shift
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            RIG="$1"
+            shift
+            ;;
+    esac
+done
+
+if ! $ALL_RIGS && [ -z "$RIG" ]; then
+    echo "Usage: gt-decommission-check <rig> [--execute]" >&2
+    echo "       gt-decommission-check --all-rigs [--execute]" >&2
+    exit 1
+fi
+
+# Get list of rigs to check
+if $ALL_RIGS; then
+    RIGS=$(ls -d "$GT_ROOT"/*/polecats 2>/dev/null | xargs -I{} dirname {} | xargs -I{} basename {} || echo "")
+else
+    RIGS="$RIG"
+fi
+
+if [ -z "$RIGS" ]; then
+    echo "No rigs with polecats found"
+    exit 0
+fi
+
+echo "=== Decommission Check ==="
+if $EXECUTE; then
+    echo "Mode: EXECUTE (will decommission candidates)"
+else
+    echo "Mode: DRY-RUN (use --execute to actually decommission)"
+fi
+echo ""
+
+TOTAL_CANDIDATES=0
+TOTAL_DECOMMISSIONED=0
+
+for RIG in $RIGS; do
+    RIG_DIR="$GT_ROOT/$RIG"
+    POLECATS_DIR="$RIG_DIR/polecats"
+
+    if [ ! -d "$POLECATS_DIR" ]; then
+        continue
+    fi
+
+    POLECATS=$(ls "$POLECATS_DIR" 2>/dev/null | grep -v "^\." || echo "")
+    if [ -z "$POLECATS" ]; then
+        continue
+    fi
+
+    echo "--- $RIG ---"
+
+    for POLECAT in $POLECATS; do
+        POLECAT_DIR="$POLECATS_DIR/$POLECAT"
+        AGENT_ID="$RIG/polecats/$POLECAT"
+        SESSION_NAME="gt-${RIG}-${POLECAT}"
+
+        # Check if session exists
+        HAS_SESSION=false
+        if tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+            HAS_SESSION=true
+        fi
+
+        # Read hooked bead
+        HOOK_FILE="$POLECAT_DIR/.gt-hook"
+        if [ ! -f "$HOOK_FILE" ]; then
+            if $HAS_SESSION; then
+                echo "  ⚪ $POLECAT - no hook file (session running, needs review)"
+            fi
+            continue
+        fi
+
+        HOOKED_BEAD=$(cat "$HOOK_FILE" 2>/dev/null | head -1 | tr -d '[:space:]')
+        if [ -z "$HOOKED_BEAD" ]; then
+            if $HAS_SESSION; then
+                echo "  ⚪ $POLECAT - empty hook (session running, needs review)"
+            fi
+            continue
+        fi
+
+        # Check bead status
+        BEAD_STATUS=$(bd show "$HOOKED_BEAD" 2>/dev/null | grep "^Status:" | awk '{print $2}' || echo "unknown")
+
+        # Determine if candidate for decommission
+        SHOULD_DECOMMISSION=false
+        REASON=""
+
+        case "$BEAD_STATUS" in
+            "closed")
+                SHOULD_DECOMMISSION=true
+                REASON="bead closed"
+                ;;
+            "hooked"|"in_progress"|"open")
+                # Still working
+                if $HAS_SESSION; then
+                    echo "  ✅ $POLECAT - working on $HOOKED_BEAD ($BEAD_STATUS)"
+                else
+                    echo "  ⏸️  $POLECAT - $HOOKED_BEAD ($BEAD_STATUS) but no session"
+                fi
+                continue
+                ;;
+            "unknown")
+                # Bead not found - might be stale
+                if $HAS_SESSION; then
+                    SHOULD_DECOMMISSION=true
+                    REASON="bead not found (stale)"
+                fi
+                ;;
+            *)
+                echo "  ❓ $POLECAT - $HOOKED_BEAD has status: $BEAD_STATUS"
+                continue
+                ;;
+        esac
+
+        if $SHOULD_DECOMMISSION; then
+            ((TOTAL_CANDIDATES++)) || true
+
+            # Check for open PRs (optional - if git available in worktree)
+            # For now, skip PR check and just check bead status
+
+            if $HAS_SESSION; then
+                SESSION_NOTE="(session running)"
+            else
+                SESSION_NOTE="(no session)"
+            fi
+
+            echo "  🔴 $POLECAT - DECOMMISSION CANDIDATE: $REASON $SESSION_NOTE"
+
+            if $EXECUTE; then
+                echo "     ↳ Decommissioning..."
+
+                # Kill tmux session first (gt polecat nuke doesn't always do this)
+                if $HAS_SESSION; then
+                    tmux kill-session -t "$SESSION_NAME" 2>/dev/null || true
+                    sleep 0.5
+                fi
+
+                # Use gt polecat nuke to clean up worktree
+                gt polecat nuke "$AGENT_ID" --force 2>/dev/null || true
+
+                # Clear hook file
+                rm -f "$HOOK_FILE" 2>/dev/null || true
+
+                echo "     ↳ ✅ Decommissioned"
+                ((TOTAL_DECOMMISSIONED++)) || true
+            fi
+        fi
+    done
+    echo ""
+done
+
+echo "=== Summary ==="
+echo "Candidates found: $TOTAL_CANDIDATES"
+if $EXECUTE; then
+    echo "Decommissioned: $TOTAL_DECOMMISSIONED"
+else
+    if [ "$TOTAL_CANDIDATES" -gt 0 ]; then
+        echo ""
+        echo "To decommission, run:"
+        echo "  gt-decommission-check ${RIG:---all-rigs} --execute"
+    fi
+fi

@@ -1,0 +1,280 @@
+#!/bin/bash
+# gt-session-activity: Monitor session activity and detect stuck/idle states
+#
+# This script analyzes tmux session output to detect:
+# - Active tool calls (⏺ prefix)
+# - Idle/waiting states (INSERT prompt, Mulling...)
+# - Time since last meaningful activity
+#
+# Activity tracking uses a state file to record:
+# - Hash of recent output (to detect changes)
+# - Timestamp of last detected activity
+#
+# Usage: gt-session-activity <rig>/<polecat> [--json] [--threshold <minutes>]
+#
+# Output (default):
+#   STATE: active|idle|stuck
+#   LAST_ACTIVITY: <seconds ago>
+#   INDICATORS: <what was detected>
+#
+# JSON output (--json):
+#   {"state": "...", "last_activity_secs": N, "indicators": [...]}
+#
+# Exit codes:
+#   0 - Session analyzed successfully
+#   1 - Session not found or error
+#   2 - Session is stuck (idle > threshold)
+
+set -e
+
+# State directory for activity tracking
+STATE_DIR="${HOME}/.gt/activity"
+mkdir -p "$STATE_DIR"
+
+# Parse arguments
+AGENT=""
+JSON_OUTPUT=false
+THRESHOLD_MINUTES=5  # Default 5 minutes for stuck detection
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --json)
+            JSON_OUTPUT=true
+            shift
+            ;;
+        --threshold)
+            THRESHOLD_MINUTES="$2"
+            shift 2
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            AGENT="$1"
+            shift
+            ;;
+    esac
+done
+
+if [ -z "$AGENT" ]; then
+    echo "Usage: gt-session-activity <rig>/<polecat> [--json] [--threshold <minutes>]" >&2
+    exit 1
+fi
+
+# Parse rig/polecat from agent string
+RIG=$(echo "$AGENT" | cut -d'/' -f1)
+POLECAT=$(echo "$AGENT" | cut -d'/' -f2)
+
+# Determine session name format
+# Polecats: gt-<rig>-<name>
+# Infrastructure (witness/refinery): gt-<rig>-<role>
+if [[ "$POLECAT" == "witness" ]] || [[ "$POLECAT" == "refinery" ]]; then
+    SESSION_NAME="gt-${RIG}-${POLECAT}"
+else
+    SESSION_NAME="gt-${RIG}-${POLECAT}"
+fi
+
+# Check if session exists
+if ! tmux has-session -t "$SESSION_NAME" 2>/dev/null; then
+    if $JSON_OUTPUT; then
+        echo '{"state": "not_found", "error": "Session does not exist"}'
+    else
+        echo "ERROR: Session not found: $SESSION_NAME"
+    fi
+    exit 1
+fi
+
+# Capture last 200 lines of session output
+OUTPUT=$(tmux capture-pane -t "$SESSION_NAME" -p -S -200 2>/dev/null || echo "")
+
+if [ -z "$OUTPUT" ]; then
+    if $JSON_OUTPUT; then
+        echo '{"state": "empty", "last_activity_secs": 0, "indicators": ["empty_output"]}'
+    else
+        echo "STATE: empty"
+        echo "LAST_ACTIVITY: 0"
+        echo "INDICATORS: empty_output"
+    fi
+    exit 0
+fi
+
+# State file for this session
+STATE_FILE="${STATE_DIR}/${SESSION_NAME}.state"
+CURRENT_TIME=$(date +%s)
+
+# Create hash of recent output to detect changes
+# We use tail -50 to focus on recent activity
+OUTPUT_HASH=$(echo "$OUTPUT" | tail -50 | md5 -q 2>/dev/null || echo "$OUTPUT" | tail -50 | md5sum | cut -d' ' -f1)
+
+# Load previous state
+PREV_HASH=""
+PREV_ACTIVITY_TIME="$CURRENT_TIME"
+if [ -f "$STATE_FILE" ]; then
+    PREV_HASH=$(head -1 "$STATE_FILE" 2>/dev/null || echo "")
+    PREV_ACTIVITY_TIME=$(tail -1 "$STATE_FILE" 2>/dev/null || echo "$CURRENT_TIME")
+fi
+
+# If output changed, update activity time
+if [ "$OUTPUT_HASH" != "$PREV_HASH" ]; then
+    # Output changed - there's activity
+    PREV_ACTIVITY_TIME="$CURRENT_TIME"
+fi
+
+# Save current state
+echo "$OUTPUT_HASH" > "$STATE_FILE"
+echo "$PREV_ACTIVITY_TIME" >> "$STATE_FILE"
+
+# Calculate time since last activity
+LAST_ACTIVITY_SECS=$((CURRENT_TIME - PREV_ACTIVITY_TIME))
+
+# Analyze output for activity patterns
+INDICATORS=()
+STATE="unknown"
+
+# Check for active tool execution (⏺ with ongoing execution)
+# These patterns indicate active work
+if echo "$OUTPUT" | tail -30 | grep -q "⏺.*\.\.\." 2>/dev/null; then
+    INDICATORS+=("tool_in_progress")
+    STATE="active"
+fi
+
+# Check for tool results (⎿) in recent output
+if echo "$OUTPUT" | tail -30 | grep -q "⎿" 2>/dev/null; then
+    INDICATORS+=("recent_tool_output")
+    if [ "$STATE" != "active" ]; then
+        STATE="active"
+    fi
+fi
+
+# Check for thinking/processing states
+if echo "$OUTPUT" | tail -20 | grep -qE "(✢ Mulling|· .*\.\.\.|Thinking|Processing)" 2>/dev/null; then
+    INDICATORS+=("thinking_state")
+    # Extract duration if present (e.g., "3m 15s")
+    DURATION=$(echo "$OUTPUT" | tail -20 | grep -oE "[0-9]+m [0-9]+s" | tail -1 || echo "")
+    if [ -n "$DURATION" ]; then
+        # Parse duration to seconds
+        MINS=$(echo "$DURATION" | grep -oE "^[0-9]+" || echo "0")
+        SECS=$(echo "$DURATION" | grep -oE "[0-9]+s" | tr -d 's' || echo "0")
+        LAST_ACTIVITY_SECS=$((MINS * 60 + SECS))
+        INDICATORS+=("duration_${DURATION// /_}")
+
+        # If mulling for too long, it's stuck
+        THRESHOLD_SECS=$((THRESHOLD_MINUTES * 60))
+        if [ "$LAST_ACTIVITY_SECS" -ge "$THRESHOLD_SECS" ]; then
+            STATE="stuck"
+            INDICATORS+=("mulling_too_long")
+        fi
+    fi
+fi
+
+# Check for INSERT prompt (idle at user input)
+# The prompt shows "❯" at the start of a line for user input
+if echo "$OUTPUT" | tail -10 | grep -qE "^❯|^─.*❯" 2>/dev/null; then
+    INDICATORS+=("insert_prompt_visible")
+
+    # Check if there's text after the prompt (user typing)
+    PROMPT_LINE=$(echo "$OUTPUT" | tail -10 | grep -E "^❯" | tail -1)
+    if [ -n "$PROMPT_LINE" ] && [ ${#PROMPT_LINE} -gt 2 ]; then
+        # Something typed at prompt - might be waiting for user
+        INDICATORS+=("text_at_prompt")
+        if [ "$STATE" == "unknown" ]; then
+            STATE="idle"
+        fi
+    else
+        # Empty prompt - definitely idle
+        INDICATORS+=("empty_prompt")
+        if [ "$STATE" == "unknown" ]; then
+            STATE="idle"
+        fi
+    fi
+fi
+
+# Check for rate limit or error states
+if echo "$OUTPUT" | tail -50 | grep -qiE "(rate limit|rate_limit|overloaded|capacity|error.*api)" 2>/dev/null; then
+    INDICATORS+=("rate_limit_or_error")
+    STATE="stuck"
+fi
+
+# Check for the bypass permissions indicator first (this is normal operation)
+BYPASS_MODE=false
+if echo "$OUTPUT" | tail -10 | grep -q "bypass permissions on" 2>/dev/null; then
+    INDICATORS+=("permissions_bypassed")
+    BYPASS_MODE=true
+fi
+
+# Check for permission prompt (awaiting user approval)
+# Only check if NOT in bypass mode
+if ! $BYPASS_MODE; then
+    if echo "$OUTPUT" | tail -20 | grep -qE "(y to approve|Allow this|Approve this)" 2>/dev/null; then
+        INDICATORS+=("awaiting_permission")
+        # This isn't stuck, just waiting for approval
+        STATE="waiting_approval"
+    fi
+fi
+
+# If we still haven't determined state, check for recent tool calls
+if [ "$STATE" == "unknown" ]; then
+    # Count tool calls in last 50 lines
+    TOOL_COUNT=$(echo "$OUTPUT" | tail -50 | grep -c "⏺" 2>/dev/null || echo "0")
+    if [ "$TOOL_COUNT" -gt 0 ]; then
+        STATE="active"
+        INDICATORS+=("tools_in_buffer")
+    else
+        STATE="idle"
+        INDICATORS+=("no_recent_tools")
+    fi
+fi
+
+# Add idle time indicator if significant
+if [ "$LAST_ACTIVITY_SECS" -gt 60 ]; then
+    IDLE_MINS=$((LAST_ACTIVITY_SECS / 60))
+    INDICATORS+=("idle_${IDLE_MINS}m")
+fi
+
+# Build indicators string
+INDICATORS_STR=$(IFS=,; echo "${INDICATORS[*]}")
+
+# Determine if stuck based on threshold
+THRESHOLD_SECS=$((THRESHOLD_MINUTES * 60))
+EXIT_CODE=0
+
+if [ "$STATE" == "stuck" ]; then
+    EXIT_CODE=2
+elif [ "$STATE" == "idle" ] && [ "$LAST_ACTIVITY_SECS" -ge "$THRESHOLD_SECS" ]; then
+    STATE="stuck"
+    INDICATORS+=("idle_too_long")
+    INDICATORS_STR=$(IFS=,; echo "${INDICATORS[*]}")
+    EXIT_CODE=2
+elif [ "$STATE" == "active" ] && [ "$LAST_ACTIVITY_SECS" -ge "$THRESHOLD_SECS" ]; then
+    # Active but no output changes for threshold time - could be stuck
+    STATE="stuck"
+    INDICATORS+=("no_output_change")
+    INDICATORS_STR=$(IFS=,; echo "${INDICATORS[*]}")
+    EXIT_CODE=2
+fi
+
+# Output results
+if $JSON_OUTPUT; then
+    # Build JSON indicators array
+    JSON_INDICATORS="["
+    FIRST=true
+    for ind in "${INDICATORS[@]}"; do
+        if $FIRST; then
+            JSON_INDICATORS+="\"$ind\""
+            FIRST=false
+        else
+            JSON_INDICATORS+=",\"$ind\""
+        fi
+    done
+    JSON_INDICATORS+="]"
+
+    echo "{\"state\": \"$STATE\", \"last_activity_secs\": $LAST_ACTIVITY_SECS, \"indicators\": $JSON_INDICATORS, \"session\": \"$SESSION_NAME\"}"
+else
+    echo "STATE: $STATE"
+    echo "LAST_ACTIVITY: $LAST_ACTIVITY_SECS"
+    echo "INDICATORS: $INDICATORS_STR"
+    echo "SESSION: $SESSION_NAME"
+fi
+
+exit $EXIT_CODE

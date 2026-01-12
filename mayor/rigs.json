@@ -1,14 +1,6 @@
 {
   "version": 1,
   "rigs": {
-    "10x_screening": {
-      "git_url": "git@github.com:CommanderCrowCode/10x_deal_screening.git",
-      "added_at": "2026-01-04T22:48:48.123434+07:00",
-      "beads": {
-        "repo": "",
-        "prefix": "1s"
-      }
-    },
     "commander_crow": {
       "git_url": "git@github.com:CommanderCrowCode/commander_crow.git",
       "added_at": "2026-01-09T20:52:41.556458+07:00",
