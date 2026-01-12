@@ -1,0 +1,58 @@
+#!/bin/bash
+# gt-mail-safe: Wrapper for gt mail that respects agent role
+#
+# Usage: gt-mail-safe inbox
+#        gt-mail-safe read <id>
+#        gt-mail-safe send <recipient> -s "subject" -m "message"
+#
+# This detects agent role from CWD and passes correct mailbox to gt mail
+
+set -e
+
+# Detect agent identity from current directory
+PWD_PATH=$(pwd)
+GT_ROOT="/Users/tanwa/gt"
+
+# Parse role from directory structure (same logic as gt-prime-safe)
+if [[ "$PWD_PATH" =~ $GT_ROOT/([^/]+)/(polecats|crew)/([^/]+) ]]; then
+    RIG="${BASH_REMATCH[1]}"
+    ROLE_TYPE="${BASH_REMATCH[2]}"
+    NAME="${BASH_REMATCH[3]}"
+    AGENT_ADDR="${RIG}/${ROLE_TYPE}/${NAME}"
+elif [[ "$PWD_PATH" =~ $GT_ROOT/([^/]+)/(witness) ]]; then
+    RIG="${BASH_REMATCH[1]}"
+    AGENT_ADDR="${RIG}/witness"
+elif [[ "$PWD_PATH" =~ $GT_ROOT/([^/]+)/(refinery) ]]; then
+    RIG="${BASH_REMATCH[1]}"
+    AGENT_ADDR="${RIG}/refinery"
+elif [[ "$PWD_PATH" == "$GT_ROOT/mayor" ]] || [[ "$PWD_PATH" =~ $GT_ROOT/mayor/ ]]; then
+    AGENT_ADDR="mayor/"
+elif [[ "$PWD_PATH" == "$GT_ROOT/deacon" ]] || [[ "$PWD_PATH" =~ $GT_ROOT/deacon/ ]]; then
+    AGENT_ADDR="deacon/"
+elif [[ "$PWD_PATH" =~ $GT_ROOT/daemon/boot ]]; then
+    AGENT_ADDR="boot/"
+else
+    # Unknown location - fall back to default gt mail behavior
+    gt mail "$@"
+    exit $?
+fi
+
+# Handle different mail commands
+CMD="$1"
+shift
+
+case "$CMD" in
+    inbox)
+        gt mail inbox "$AGENT_ADDR" "$@"
+        ;;
+    read|show)
+        gt mail read "$@"
+        ;;
+    send)
+        gt mail send "$@"
+        ;;
+    *)
+        echo "Usage: gt-mail-safe {inbox|read|send} [args]"
+        exit 1
+        ;;
+esac
