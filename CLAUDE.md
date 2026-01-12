@@ -559,3 +559,60 @@ Reference from Steve Yegge's Gas Town article. Use these to verify agents are wo
 - **Workaround**: Manual hook (echo bead-id > .gt-hook) + gt prime
 
 Town root: /Users/tanwa/gt
+
+---
+
+## 🔐 CRITICAL: Infisical-Only Secrets Policy
+
+**ALL credential access and storage MUST go through Infisical.**
+
+### Mandatory Requirements
+
+1. **Never hardcode secrets** - No credentials in code, config files, or environment files
+2. **Infisical CLI or SDK required** - All secrets must be fetched from Infisical
+3. **No .env files with real secrets** - Use `.env.example` for templates only
+
+### When Infisical Access is Unavailable
+
+If CLI session is expired or Machine Identity not configured:
+1. **STOP** - Do not proceed with workarounds
+2. **Escalate to Overseer**:
+   ```bash
+   gt mail send overseer -s "🔐 Infisical Access Required" -m "
+   Need Infisical access for: <what you're trying to do>
+
+   Missing:
+   - [ ] CLI login (run: infisical login)
+   - [ ] Machine Identity (for automated/production use)
+
+   Please configure and respond.
+   "
+   ```
+3. **Wait** - Do not use placeholder or temporary credentials
+
+### Infisical Project Reference
+
+| Project | Workspace ID | Scope |
+|---------|--------------|-------|
+| Flamingo Ops | `635f03f1-ff77-445d-b352-5f1cd1f53ecc` | F492 Thai/SG + Infrastructure |
+| Lumicello | `3ba90ac8-2b88-489d-9a93-2d1606e0f2a5` | EdTech products |
+| Two Flamingos | `3a0dd5f4-0e78-4bbc-b1ef-4c0457ac9b80` | Trading (HUMAN-ONLY) |
+
+### Quick Reference
+
+```bash
+# Check CLI login status
+infisical whoami
+
+# Fetch secrets for development
+cd /tmp && echo '{"workspaceId": "<PROJECT_ID>"}' > .infisical.json
+infisical secrets --env=dev
+
+# Run app with secrets injected
+infisical run --env=dev -- python app.py
+
+# Export for docker build
+infisical export --env=dev --format=dotenv > .env.local
+```
+
+**See skill**: `/infisical-secrets` for comprehensive usage guide
