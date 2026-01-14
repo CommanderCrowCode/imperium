@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+#
+# gt-witness-scheduler - Periodically nudge witnesses to patrol
+#
+# Usage: gt-witness-scheduler [start|stop|status]
+#
+# This runs as a background daemon that nudges all witness sessions
+# to run their patrol at regular intervals.
+#
+# Part of Gas Town resilience-by-design: ensures witness patrols run.
+
+set -euo pipefail
+
+PIDFILE="$HOME/gt/.witness-scheduler.pid"
+LOGFILE="$HOME/gt/.witness-scheduler.log"
+INTERVAL=600  # 10 minutes
+
+start_scheduler() {
+    if [[ -f "$PIDFILE" ]]; then
+        pid=$(cat "$PIDFILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "Scheduler already running (PID $pid)"
+            return 0
+        fi
+        rm -f "$PIDFILE"
+    fi
+
+    echo "Starting witness scheduler (interval: ${INTERVAL}s)..."
+
+    # Run in background
+    (
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - Witness scheduler started" >> "$LOGFILE"
+
+        while true; do
+            # Find all witness sessions
+            for session in $(tmux list-sessions -F "#{session_name}" 2>/dev/null | grep "\-witness$"); do
+                rig=$(echo "$session" | sed 's/^gt-//' | sed 's/-witness$//')
+                echo "$(date '+%Y-%m-%d %H:%M:%S') - Nudging $session" >> "$LOGFILE"
+
+                # Nudge witness to patrol
+                tmux send-keys -t "$session" "Run patrol: check polecats, MQ, and orphan branches" Enter 2>/dev/null || true
+            done
+
+            sleep "$INTERVAL"
+        done
+    ) &
+
+    echo $! > "$PIDFILE"
+    echo "✅ Scheduler started (PID $(cat "$PIDFILE"))"
+    echo "   Log: $LOGFILE"
+}
+
+stop_scheduler() {
+    if [[ -f "$PIDFILE" ]]; then
+        pid=$(cat "$PIDFILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            kill "$pid"
+            rm -f "$PIDFILE"
+            echo "✅ Scheduler stopped"
+            return 0
+        fi
+        rm -f "$PIDFILE"
+    fi
+    echo "Scheduler not running"
+}
+
+status_scheduler() {
+    if [[ -f "$PIDFILE" ]]; then
+        pid=$(cat "$PIDFILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "✅ Scheduler running (PID $pid)"
+            echo "   Interval: ${INTERVAL}s"
+            echo "   Log: $LOGFILE"
+            echo ""
+            echo "Recent activity:"
+            tail -5 "$LOGFILE" 2>/dev/null || echo "   (no log yet)"
+            return 0
+        fi
+    fi
+    echo "❌ Scheduler not running"
+}
+
+case "${1:-status}" in
+    start)
+        start_scheduler
+        ;;
+    stop)
+        stop_scheduler
+        ;;
+    status)
+        status_scheduler
+        ;;
+    restart)
+        stop_scheduler
+        sleep 1
+        start_scheduler
+        ;;
+    *)
+        echo "Usage: gt-witness-scheduler [start|stop|status|restart]"
+        exit 1
+        ;;
+esac

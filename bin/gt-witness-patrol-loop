@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+#
+# gt-witness-patrol-loop - Run witness patrol on a schedule
+#
+# Usage: gt-witness-patrol-loop [rig-name] [base-interval-seconds]
+#
+# This script runs patrol in a loop with adaptive backoff:
+# - Base interval: 600s (10 min) by default
+# - If issues found: stays at base interval
+# - If no issues: gradually increases to 2x base (max 20 min)
+# - Resets to base when issues detected
+#
+# Part of Gas Town resilience-by-design: ensures witness detection runs.
+
+set -euo pipefail
+
+RIG="${1:-}"
+BASE_INTERVAL="${2:-600}"  # 10 minutes default
+MAX_INTERVAL=$((BASE_INTERVAL * 2))  # Max 2x base
+
+# Detect rig from CWD if not provided
+if [[ -z "$RIG" ]]; then
+    CWD=$(pwd)
+    if [[ "$CWD" =~ /gt/([^/]+)/witness ]]; then
+        RIG="${BASH_REMATCH[1]}"
+    else
+        echo "Usage: gt-witness-patrol-loop <rig-name> [interval-seconds]"
+        echo "Or run from within a rig's witness directory"
+        exit 1
+    fi
+fi
+
+PATROL_SCRIPT="$HOME/gt/$RIG/witness/patrol.sh"
+if [[ ! -x "$PATROL_SCRIPT" ]]; then
+    echo "Patrol script not found or not executable: $PATROL_SCRIPT"
+    exit 1
+fi
+
+current_interval=$BASE_INTERVAL
+consecutive_clean=0
+
+echo "🦉 Starting witness patrol loop for $RIG"
+echo "   Base interval: ${BASE_INTERVAL}s"
+echo "   Max interval: ${MAX_INTERVAL}s"
+echo ""
+
+while true; do
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🕐 $(date '+%Y-%m-%d %H:%M:%S') - Running patrol..."
+    echo ""
+
+    # Run patrol and capture exit code
+    patrol_result=0
+    "$PATROL_SCRIPT" || patrol_result=$?
+
+    if [[ $patrol_result -ne 0 ]]; then
+        # Issues found - reset to base interval
+        echo ""
+        echo "⚠️  Issues detected - resetting to base interval"
+        current_interval=$BASE_INTERVAL
+        consecutive_clean=0
+    else
+        # No issues - consider backing off
+        ((consecutive_clean++))
+        if [[ $consecutive_clean -ge 3 && $current_interval -lt $MAX_INTERVAL ]]; then
+            # After 3 clean patrols, increase interval by 50%
+            new_interval=$((current_interval + current_interval / 2))
+            if [[ $new_interval -gt $MAX_INTERVAL ]]; then
+                new_interval=$MAX_INTERVAL
+            fi
+            current_interval=$new_interval
+            echo ""
+            echo "✅ Clean patrol #$consecutive_clean - backing off to ${current_interval}s"
+        fi
+    fi
+
+    echo ""
+    echo "💤 Next patrol in ${current_interval}s ($(date -v+${current_interval}S '+%H:%M:%S'))"
+    echo ""
+
+    sleep "$current_interval"
+done
