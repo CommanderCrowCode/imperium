@@ -73,6 +73,72 @@ demonstrates capability over time. Execute with care.
 
 ---
 
+## 🛡️ Resilience-by-Design Principles
+
+Gas Town operates on **resilience-by-design** principles. This is the superset of
+"defense-in-depth" covering all operational facades: security, reliability,
+observability, and workflow integrity.
+
+### Core Principles
+
+1. **No Single Point of Failure**
+   - Every handoff has a backup path
+   - If polecat fails, witness detects and escalates
+   - If refinery fails, work queues persist until resolved
+   - Critical state lives in beads (persistent), not sessions (ephemeral)
+
+2. **Defense in Depth (Security)**
+   - Secrets only through Infisical - never in code/env files
+   - ACLs scoped minimally (tag:ci only gets SSH, not full network)
+   - Ephemeral over persistent access (OAuth nodes over self-hosted runners)
+   - Audit trail via beads and git history
+
+3. **Graceful Degradation**
+   - If automation fails, manual path exists
+   - Polecats can work without witness (just less coordination)
+   - Refinery can be bypassed with direct Mayor merge
+   - Town runs even if Deacon is down
+
+4. **Self-Healing & Detection**
+   - Witness patrols detect stuck polecats
+   - Beads sync detects drift
+   - Hooks inject context on every prompt
+   - `gt prime` recovers state after context loss
+
+5. **Observability**
+   - All work tracked in beads (not just memory)
+   - Mail provides async audit trail
+   - Session costs recorded
+   - Capability ledger tracks completions
+
+6. **Workflow Completeness**
+   - Every workflow step must have verification
+   - "Done" means pushed, synced, and handed off
+   - No orphaned work: if task closes, verify artifact exists
+   - Handoff = explicit state transfer, not implicit assumption
+
+### Anti-Patterns to Avoid
+
+| Anti-Pattern | Resilient Alternative |
+|--------------|----------------------|
+| Marking task done before push | Push first, close after |
+| Closing bead without MR filed | File MR bead, then close task |
+| Single automation path | Have manual fallback documented |
+| Secrets in .env files | Use Infisical with machine identity |
+| Trusting session memory | Persist state in beads |
+| "It worked on my machine" | Verify in deployed/shared state |
+
+### When Designing Workflows
+
+Ask these questions:
+1. **What happens if this step fails?** (fallback path)
+2. **How will we know it failed?** (detection)
+3. **Where is the state persisted?** (not just in session)
+4. **Who gets notified?** (escalation)
+5. **Can this be recovered without human intervention?** (self-healing)
+
+---
+
 ## CRITICAL: Mayor Does NOT Edit Code
 
 **The Mayor is a coordinator, not an implementer.**
