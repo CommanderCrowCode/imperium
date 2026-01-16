@@ -79,6 +79,9 @@ hook_bead:
 role_bead: gt-polecat-role" --force 2>/dev/null || true
 fi
 
+# Install push protection if rig has it
+"$GT_ROOT/bin/gt-protect-polecat" "$RIG" "$POLECAT_NAME" 2>/dev/null || true
+
 # Unhook any existing beads assigned to this polecat
 cd "$WORK_DIR"
 echo "Checking for existing hooked beads..."
