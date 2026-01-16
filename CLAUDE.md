@@ -294,6 +294,49 @@ gt mail send 10x_screening/crew/tanwa -s "..." -m "..."
 gt mail send overseer -s "..." -m "..."
 ```
 
+### Inter-Agent Communication Best Practices
+
+**Pattern learned from psu_teaching/crew/planner:**
+
+When requesting work from another agent (polecat or crew), use this two-step pattern:
+
+**1. Send mail for audit trail:**
+```bash
+gt mail send <rig>/<crew or polecats>/<name> \
+  -s "Subject" \
+  -m "Work request details"
+```
+
+**2. Send tmux notification (CRITICAL - agents won't check mail otherwise):**
+```bash
+# Send notification message
+tmux send-keys -t gt-<rig>-<name> "New mail from mayor. Check: gt mail inbox"
+# Send Enter key SEPARATELY (required for proper execution)
+tmux send-keys -t gt-<rig>-<name> Enter
+```
+
+**Why both steps matter:**
+- **Mail**: Creates permanent audit trail, work request details
+- **tmux notify**: Alerts agent immediately to check mail (agents don't auto-poll)
+- **Separate Enter**: tmux requires Enter key sent as separate command
+
+**Full Example:**
+```bash
+# Request work from polecat
+gt mail send 10x_screening/polecats/researcher \
+  -s "Gather competitor analysis" \
+  -m "Please research competitors in the market intelligence space."
+
+# Notify them
+tmux send-keys -t gt-10x_screening-researcher "New mail from mayor. Check: gt mail inbox"
+tmux send-keys -t gt-10x_screening-researcher Enter
+```
+
+**tmux Session Naming:**
+- Pattern: `gt-<rig>-<agent-name>`
+- Example: `gt-10x_screening-researcher`, `gt-lumicello_website-capable`
+- Verify with: `tmux ls | grep <rig>`
+
 ### Status
 - `gt status` - Overall town status
 - `gt rigs` - List all rigs
