@@ -139,6 +139,39 @@ Ask these questions:
 
 ---
 
+## 📋 Universal Gas Town Protocols
+
+**All Gas Town agents follow universal operational protocols documented in `~/gt/PROTOCOLS.md`.**
+
+### Critical Protocols (MANDATORY)
+
+1. **Communication Protocol:** When sending mail expecting action:
+   - Send mail (audit trail)
+   - Verify recipient session exists
+   - Send tmux notification (agents don't auto-poll)
+   - Verify notification sent
+
+2. **Session Completion:** Before ending ANY session:
+   - File remaining work as beads
+   - Run quality gates (if code changed)
+   - Update bead status
+   - Push to remote (git pull --rebase, bd sync, git push)
+   - Verify tmux notifications sent (if mail sent)
+   - Clean up (stashes, branches)
+   - Hand off context (if incomplete)
+
+3. **Session Naming:** All agents use consistent tmux session patterns
+   - See PROTOCOLS.md for complete reference table
+   - Mayor: `gt-mayor`
+   - Witness: `gt-<rig>-witness`
+   - Refinery: `gt-<rig>-refinery`
+   - Polecat: `gt-<rig>-<polecat-name>`
+   - Crew: `gt-<rig>-crew-<member>`
+
+**These protocols implement resilience-by-design principles:** No single point of failure (mail + tmux), workflow completeness (mandatory push), observability (session naming), self-healing (agents check mail on restart).
+
+---
+
 ## CRITICAL: Mayor Does NOT Edit Code
 
 **The Mayor is a coordinator, not an implementer.**
@@ -294,11 +327,11 @@ gt mail send 10x_screening/crew/tanwa -s "..." -m "..."
 gt mail send overseer -s "..." -m "..."
 ```
 
-### Inter-Agent Communication Best Practices
+### Inter-Agent Communication Protocol (MANDATORY)
 
-**Pattern learned from psu_teaching/crew/planner:**
+**See `~/gt/PROTOCOLS.md` for complete universal Gas Town protocols.**
 
-When requesting work from another agent (polecat or crew), use this two-step pattern:
+When requesting work from another agent (polecat or crew), you MUST follow this pattern:
 
 **1. Send mail for audit trail:**
 ```bash
@@ -494,16 +527,32 @@ cross-session continuity when work doesn't fit neatly into a bead.
 
 ## Session End Checklist
 
+**MANDATORY: Complete ALL steps before ending session. See `~/gt/PROTOCOLS.md` for universal Gas Town protocols.**
+
 ```
-[ ] git status              (check what changed)
-[ ] git add <files>         (stage code changes)
-[ ] bd sync                 (commit beads changes)
-[ ] git commit -m "..."     (commit code)
-[ ] bd sync                 (commit any new beads changes)
-[ ] git push                (push to remote)
-[ ] HANDOFF (if incomplete work):
-    gt mail send mayor/ -s "🤝 HANDOFF: <brief>" -m "<context>"
+[ ] 1. File remaining work as beads (don't leave TODOs in memory)
+[ ] 2. Run quality gates (if code changed: tests, linters, builds)
+[ ] 3. Update bead status (close completed, update in-progress)
+[ ] 4. Push to remote (MANDATORY):
+        git pull --rebase
+        bd sync
+        git add <files>
+        git commit -m "..."
+        bd sync
+        git push
+        git status  # MUST show "up to date with origin"
+[ ] 5. Verify tmux notifications sent (if mail sent expecting action)
+[ ] 6. Clean up (clear stashes, prune remote branches)
+[ ] 7. Hand off context (if work incomplete):
+        gt mail send mayor/ -s "🤝 HANDOFF: <brief>" -m "<context>"
 ```
+
+**CRITICAL RULES:**
+- ❌ Work NOT complete until `git push` succeeds
+- ❌ NEVER stop before pushing - leaves work stranded locally
+- ❌ NEVER say "ready to push when you are" - YOU must push
+- ❌ If push fails, resolve and retry until it succeeds
+- ✅ If sent mail expecting action, tmux notification is MANDATORY
 
 ## Rig Housekeeping Reference
 
