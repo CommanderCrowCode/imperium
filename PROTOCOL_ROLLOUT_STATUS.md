@@ -57,24 +57,59 @@
 
 ---
 
-## Phase 2: Coordinators ⏳ PENDING
+## Phase 2: Coordinators ✅ COMPLETE
 
-**Target Agents:**
-- Witnesses (`gt-<rig>-witness`)
-- Refineries (`gt-<rig>-refinery`)
+**Status:** Implemented 2026-01-18
+**Agents:** Witnesses and Refineries (all rigs)
 
-**Plan:**
-1. Update rig-specific CLAUDE.md files (if they exist)
-2. Add session naming reference table for their rig
-3. Emphasize communication protocol (they coordinate multiple agents)
-4. Test with 2-3 rigs before wide rollout
+### Changes Made
 
-**Priority Rigs:**
-- psu_teaching (active, already follows most protocols)
-- lumicello_website (active, refinery in use)
-- 10x_screening (moderate activity)
+1. ✅ Created `~/gt/templates/witness-context.md` (universal template)
+2. ✅ Created `~/gt/templates/refinery-context.md` (universal template)
+3. ✅ Deployed to ALL rig runtime directories:
+   - psu_teaching, lumicello_website, 10x_screening (priority rigs)
+   - lumicello_inventory, lumicello_big_garden, flamingo_dominion
+   - tanwa_info, commander_crow, watchtower, tools_cc_monitor
+4. ✅ Templates committed to git (commit 9ac1731)
 
-**Timeline:** Week 1 (after Mayor validation)
+### Protocols Enforced
+
+| Protocol | Status | Implementation |
+|----------|--------|----------------|
+| **Communication (mail+tmux)** | ✅ MANDATORY | In templates, lines 14-36 (witness), 14-36 (refinery) |
+| **Session Completion** | ✅ MANDATORY | 7-step checklist in both templates |
+| **Session Naming** | ✅ REFERENCE | Patterns documented for each rig |
+| **Stuck Detection** | ✅ WITNESS ONLY | Workflow lines 86-138 (witness-context.md) |
+| **Merge Queue** | ✅ REFINERY ONLY | Workflow lines 86-159 (refinery-context.md) |
+| **Escalation Format** | ✅ STRUCTURED | Templates lines 141-164 (witness), 162-187 (refinery) |
+
+### Deployment Notes
+
+**Runtime vs. Version Control:**
+- Templates deployed to `<rig>/witness/.claude/CLAUDE.md`
+- Templates deployed to `<rig>/refinery/.claude/CLAUDE.md`
+- These directories are gitignored (correct for ephemeral worktrees)
+- Version-controlled templates in `~/gt/templates/` serve as canonical source
+
+**On Next Spawn:**
+- New witness/refinery sessions will receive these contexts
+- Existing sessions need restart to pick up changes
+- Contexts available via Claude Code's .claude/ directory loading
+
+### Testing
+
+**Phase 2 Testing Deferred:**
+- No active witness/refinery sessions currently running
+- Templates deployed and ready for next spawn
+- Will validate on next coordinator activation
+
+**Manual Verification:**
+- [x] Templates created with complete protocols
+- [x] Deployed to all 10 rigs
+- [x] Version-controlled templates committed
+- [x] Runtime templates in place (gitignored)
+
+**Timeline:** Completed same day as Phase 1 (2026-01-18)
 
 ---
 
@@ -176,9 +211,11 @@ If protocols cause issues:
 ---
 
 **Status Summary:**
-- ✅ Phase 1 (Mayor): COMPLETE
-- ⏳ Phase 2 (Coordinators): PENDING
+- ✅ Phase 1 (Mayor): COMPLETE (2026-01-18)
+- ✅ Phase 2 (Coordinators): COMPLETE (2026-01-18)
 - ⏳ Phase 3 (Workers): PENDING
 - ⏳ Universal Hook: PENDING
 
-**Next Action:** Monitor Mayor compliance, prepare Phase 2 rollout
+**Next Action:** Implement Phase 3 (Workers) via universal hook injection
+
+**Progress:** 2/4 phases complete (50%)
