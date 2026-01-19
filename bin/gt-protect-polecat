@@ -1,0 +1,49 @@
+#!/bin/bash
+# gt-protect-polecat: Install push protection hook in a polecat worktree
+#
+# For git worktrees, hooks are shared from the main repo.
+# We set core.hooksPath to override with local hooks dir.
+#
+# Usage: gt-protect-polecat <rig> <polecat>
+
+set -e
+
+GT_ROOT="${HOME}/gt"
+RIG="$1"
+POLECAT="$2"
+
+if [ -z "$RIG" ] || [ -z "$POLECAT" ]; then
+    echo "Usage: gt-protect-polecat <rig> <polecat>" >&2
+    exit 1
+fi
+
+MAYOR_HOOK="$GT_ROOT/$RIG/mayor/rig/.git/hooks/pre-push"
+POLECAT_DIR="$GT_ROOT/$RIG/polecats/$POLECAT"
+
+# Find the worktree dir
+if [ -d "$POLECAT_DIR/$RIG" ]; then
+    WORKTREE_DIR="$POLECAT_DIR/$RIG"
+else
+    WORKTREE_DIR="$POLECAT_DIR"
+fi
+
+# Check if mayor has push protection
+if [ ! -f "$MAYOR_HOOK" ]; then
+    exit 0
+fi
+
+# For worktrees, we need to:
+# 1. Create a local hooks dir in the worktree
+# 2. Set core.hooksPath to point to it
+# 3. Copy the hook there
+
+LOCAL_HOOKS="$WORKTREE_DIR/.git-hooks"
+mkdir -p "$LOCAL_HOOKS"
+cp "$MAYOR_HOOK" "$LOCAL_HOOKS/pre-push"
+chmod +x "$LOCAL_HOOKS/pre-push"
+
+# Set core.hooksPath for this worktree
+cd "$WORKTREE_DIR"
+git config core.hooksPath "$LOCAL_HOOKS"
+
+echo "🛡️  Push protection installed for $RIG/$POLECAT"

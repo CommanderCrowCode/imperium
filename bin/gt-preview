@@ -1,0 +1,170 @@
+#!/bin/bash
+# gt-preview: Preview unpushed polecat work locally
+#
+# Creates an isolated preview worktree, merges polecat branches, serves locally.
+# Completely safe - never modifies mayor/rig or pushes anything.
+#
+# Usage: 
+#   gt-preview <rig>                    # Preview all polecats
+#   gt-preview <rig> --list             # List available polecat work
+#   gt-preview <rig> --stop             # Stop preview and cleanup
+#
+# Options:
+#   --port <N>    Port to serve on (default: 8888)
+#   --no-open     Don't auto-open browser
+
+set -e
+
+GT_ROOT="${HOME}/gt"
+RIG=""
+PORT=8888
+AUTO_OPEN=true
+LIST_ONLY=false
+STOP=false
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --port)
+            PORT="$2"
+            shift 2
+            ;;
+        --no-open)
+            AUTO_OPEN=false
+            shift
+            ;;
+        --list)
+            LIST_ONLY=true
+            shift
+            ;;
+        --stop)
+            STOP=true
+            shift
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            RIG="$1"
+            shift
+            ;;
+    esac
+done
+
+if [ -z "$RIG" ]; then
+    echo "Usage: gt-preview <rig> [--list|--stop]"
+    echo ""
+    echo "Examples:"
+    echo "  gt-preview lumicello_website          # Preview all polecat work"
+    echo "  gt-preview lumicello_website --list   # Show available work"
+    echo "  gt-preview lumicello_website --stop   # Cleanup preview"
+    exit 1
+fi
+
+RIG_DIR="$GT_ROOT/$RIG"
+PREVIEW_DIR="$RIG_DIR/preview"
+REPO_GIT="$RIG_DIR/.repo.git"
+
+if [ ! -d "$RIG_DIR" ]; then
+    echo "ERROR: Rig not found: $RIG" >&2
+    exit 1
+fi
+
+# Stop/cleanup
+if $STOP; then
+    echo "🧹 Cleaning up preview..."
+    pkill -f "http.server.*$PORT" 2>/dev/null || true
+    if [ -d "$PREVIEW_DIR" ]; then
+        cd "$GT_ROOT"
+        git -C "$REPO_GIT" worktree remove "$PREVIEW_DIR" --force 2>/dev/null || rm -rf "$PREVIEW_DIR"
+    fi
+    git -C "$REPO_GIT" branch -D preview-local 2>/dev/null || true
+    echo "✅ Preview cleaned up"
+    exit 0
+fi
+
+# List polecats and their work
+echo "📋 Polecat work in $RIG:"
+echo ""
+for POLECAT_DIR in "$RIG_DIR/polecats"/*/; do
+    if [ -d "$POLECAT_DIR" ]; then
+        POLECAT_NAME=$(basename "$POLECAT_DIR")
+        WORKTREE="$POLECAT_DIR/$RIG"
+        if [ -d "$WORKTREE" ]; then
+            BRANCH=$(cd "$WORKTREE" && git branch --show-current 2>/dev/null || true)
+            COMMITS=$(cd "$WORKTREE" && git log origin/main..HEAD --oneline 2>/dev/null | wc -l | tr -d ' ')
+            HOOK=$(cat "$POLECAT_DIR/.gt-hook" 2>/dev/null || echo "none")
+            if [ "$COMMITS" -gt 0 ]; then
+                echo "  🔧 $POLECAT_NAME: $COMMITS commit(s) on $BRANCH"
+                echo "     Hook: $HOOK"
+                cd "$WORKTREE" && git log origin/main..HEAD --oneline 2>/dev/null | head -3 | sed 's/^/     /'
+                echo ""
+            else
+                echo "  ⚪ $POLECAT_NAME: no unpushed commits (hook: $HOOK)"
+            fi
+        fi
+    fi
+done
+
+if $LIST_ONLY; then
+    exit 0
+fi
+
+echo ""
+echo "🔀 Creating preview worktree..."
+
+# Create preview worktree
+cd "$RIG_DIR"
+if [ -d "$PREVIEW_DIR" ]; then
+    git -C "$REPO_GIT" worktree remove "$PREVIEW_DIR" --force 2>/dev/null || rm -rf "$PREVIEW_DIR"
+fi
+git -C "$REPO_GIT" branch -D preview-local 2>/dev/null || true
+git -C "$REPO_GIT" fetch origin main 2>/dev/null || true
+git -C "$REPO_GIT" worktree add -B preview-local "$PREVIEW_DIR" origin/main 2>/dev/null
+
+cd "$PREVIEW_DIR"
+
+MERGED_COUNT=0
+CONFLICT_COUNT=0
+
+# Merge each polecat's work
+for POLECAT_DIR in "$RIG_DIR/polecats"/*/; do
+    if [ -d "$POLECAT_DIR" ]; then
+        POLECAT_NAME=$(basename "$POLECAT_DIR")
+        WORKTREE="$POLECAT_DIR/$RIG"
+        if [ -d "$WORKTREE" ]; then
+            COMMITS=$(cd "$WORKTREE" && git rev-list origin/main..HEAD 2>/dev/null || true)
+            if [ -n "$COMMITS" ]; then
+                echo "  Merging $POLECAT_NAME..."
+                # Try to merge the branch
+                BRANCH=$(cd "$WORKTREE" && git branch --show-current)
+                if git merge "$BRANCH" --no-commit --no-ff -m "Preview merge: $POLECAT_NAME" 2>/dev/null; then
+                    git commit -m "Preview: $POLECAT_NAME" 2>/dev/null || true
+                    ((MERGED_COUNT++))
+                else
+                    echo "    ⚠️  Conflict - skipping"
+                    git merge --abort 2>/dev/null || git reset --hard HEAD
+                    ((CONFLICT_COUNT++))
+                fi
+            fi
+        fi
+    fi
+done
+
+echo ""
+echo "✅ Preview ready: $MERGED_COUNT merged, $CONFLICT_COUNT skipped"
+echo ""
+echo "🌐 Starting server at http://localhost:$PORT"
+echo "   Preview dir: $PREVIEW_DIR"
+echo ""
+echo "   Press Ctrl+C to stop (run 'gt-preview $RIG --stop' to cleanup)"
+echo ""
+
+# Open browser
+if $AUTO_OPEN; then
+    (sleep 1 && open "http://localhost:$PORT") &
+fi
+
+# Start server
+python3 -m http.server $PORT

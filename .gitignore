@@ -67,6 +67,10 @@
 .events.jsonl
 .feed.jsonl
 .claude/
+.gt-hook
+
+# Backups
+bin.backup*/
 
 # Rig directories (local Git Town state, not tracked)
 /10x_screening/
@@ -75,6 +79,9 @@
 /lumicello_website/
 /tanwa_info/
 /tools_cc_monitor/
+/psu_teaching/
+/lumicello_big_garden/
+/watchtower/
 
 # Gas Town daemon infrastructure
 /daemon/
