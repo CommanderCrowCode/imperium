@@ -1,0 +1,185 @@
+# Formula: mol-deacon-patrol
+# Type: workflow
+# Created for: Deacon patrol executor
+
+description = """Deacon patrol cycle workflow.
+
+Monitors Gas Town infrastructure health, processes lifecycle requests,
+and maintains agent uptime. Implements resilience-by-design principles:
+- Independent failure domains (each step isolated)
+- Graceful degradation (continue on non-critical failures)
+- Self-healing detection and remediation
+- Complete audit trail via state.json"""
+formula = "mol-deacon-patrol"
+version = 1
+
+# Step 1: Signal alive
+[[steps]]
+id = "heartbeat"
+title = "Signal heartbeat"
+description = """
+Update heartbeat.json to signal Deacon is alive.
+
+**Resilience**: Creates freshness signal for external monitoring.
+
+**Actions:**
+- Read current state.json (if exists)
+- Update heartbeat.json with timestamp
+- Signal: gt deacon heartbeat "patrol cycle {{cycle_id}}"
+
+**Success criteria:**
+- heartbeat.json updated with current timestamp
+"""
+
+# Step 2: Process messages
+[[steps]]
+id = "inbox-check"
+title = "Process inbox"
+needs = ["heartbeat"]
+description = """
+Check and process all pending messages.
+
+**Resilience**: Process lifecycle requests before health checks to handle
+restart/cycle requests immediately.
+
+**Actions:**
+1. Check mail: gt mail inbox
+2. For each message:
+   - LIFECYCLE requests: Execute action, acknowledge, delete
+   - TIMER callbacks: Check time, poke if due, delete
+   - HANDOFF messages: Read for context, delete
+   - Other: Log and escalate if unclear
+3. Update state.json with message counts
+
+**Success criteria:**
+- All messages processed or escalated
+- Inbox empty or only future timers remain
+- state.json updated with processed count
+"""
+
+# Step 3: Monitor agent health
+[[steps]]
+id = "health-scan"
+title = "Scan agent health"
+needs = ["inbox-check"]
+description = """
+Monitor critical Gas Town agents.
+
+**Resilience**: Independent checks allow partial success - if Mayor check
+fails, still check Witnesses.
+
+**Actions:**
+1. Check Mayor session: tmux ls | grep -q gt-mayor
+2. For each rig in gt rigs:
+   - Check Witness: tmux ls | grep -q "gt-{rig}-witness"
+   - Record status
+3. Update state.json with:
+   - mayor_status: up/down
+   - witness_status: {rig: status}
+   - scan_timestamp
+
+**Success criteria:**
+- All agents checked (success/failure recorded)
+- state.json updated with current status
+"""
+
+# Step 4: Remediate issues
+[[steps]]
+id = "remediate"
+title = "Remediate detected issues"
+needs = ["health-scan"]
+description = """
+Attempt to fix detected problems.
+
+**Resilience**: Escalate after 3 failed attempts. Track attempts in state.json
+to prevent infinite loops.
+
+**Actions:**
+1. Read state.json for agent_status
+2. If Mayor down:
+   - CRITICAL: Escalate immediately to overseer
+   - Set extraordinary_action = true
+3. If Witness down:
+   - Attempt restart (max 3 tries)
+   - If fails: Escalate to overseer
+   - Set extraordinary_action = true if restarted
+4. Update state.json with remediation_log
+
+**Success criteria:**
+- All detected issues either fixed or escalated
+- state.json updated with actions taken
+- extraordinary_action flag set if any remediation occurred
+"""
+
+# Step 5: Run scheduled plugins
+[[steps]]
+id = "plugin-run"
+title = "Execute scheduled plugins"
+needs = ["remediate"]
+description = """
+Run any due scheduled maintenance plugins.
+
+**Resilience**: Plugin failures are logged but don't stop patrol. Each plugin
+is independent.
+
+**Actions:**
+1. Check for plugin schedule in {{state_file}}
+2. For each due plugin:
+   - Execute in isolated context
+   - Log results (success/failure/skipped)
+   - Update next_run timestamp
+3. Update state.json with plugin_log
+
+**Success criteria:**
+- All due plugins executed or logged as failed
+- state.json updated with plugin results
+- No plugin failure stops the patrol cycle
+"""
+
+# Step 6: Loop or exit decision
+[[steps]]
+id = "loop-or-exit"
+title = "Context management: loop or exit"
+needs = ["plugin-run"]
+description = """
+Decide whether to continue patrol or hand off.
+
+**Resilience**: Prevents context exhaustion while maintaining coverage.
+Fresh Deacon has full context for emergencies.
+
+**Decision logic:**
+1. Read state.json for:
+   - patrol_count
+   - extraordinary_action flag
+2. If extraordinary_action == true:
+   - Squash wisp with summary
+   - Exit (daemon respawns with fresh context)
+3. If patrol_count >= 20:
+   - Squash wisp with summary
+   - Exit (daemon respawns)
+4. Otherwise:
+   - Increment patrol_count
+   - Save state.json
+   - Squash current wisp
+   - Create new patrol wisp: bd mol wisp create mol-deacon-patrol
+   - Hook it: bd update <wisp-id> --status=hooked --assignee=deacon
+   - Continue to heartbeat step
+
+**Success criteria:**
+- Decision made and logged
+- If looping: new wisp created and hooked
+- If exiting: state.json saved for next session
+- Current wisp squashed with summary
+"""
+
+# Variables
+[vars]
+[vars.cycle_id]
+description = "Unique identifier for this patrol cycle (e.g., timestamp)"
+required = false
+default = "auto"
+
+[vars.state_file]
+description = "Path to state.json for patrol tracking"
+required = false
+default = "/Users/tanwa/gt/deacon/state.json"
