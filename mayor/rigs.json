@@ -65,6 +65,14 @@
         "prefix": "tcm"
       }
     },
+    "utility_scripts": {
+      "git_url": "git@github.com:CommanderCrowCode/SISIA_scripts.git",
+      "added_at": "2026-01-21T16:00:25.054339+07:00",
+      "beads": {
+        "repo": "",
+        "prefix": "scripts"
+      }
+    },
     "watchtower": {
       "git_url": "https://github.com/CommanderCrowCode/watchtower",
       "added_at": "2026-01-12T12:13:04.456204+07:00",
