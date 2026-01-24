@@ -7,45 +7,87 @@
 
 ## 🔄 Communication Protocol (MANDATORY)
 
-**When sending mail expecting action or response, you MUST follow all steps:**
+**Session-aware notification with escalation.**
 
 ### 1. Send Mail (Audit Trail)
 ```bash
 gt mail send <address> -s "Subject" -m "Message content"
 ```
 
-### 2. Verify Recipient Session Exists
+### 2. Check if Recipient Session Exists
 ```bash
-tmux ls | grep <expected-session-name>
+tmux has-session -t <session-name> 2>/dev/null
 ```
 
-### 3. Send tmux Notification (CRITICAL)
-```bash
-# Send notification message
-tmux send-keys -t <session-name> "New mail from <your-role>. Check: gt mail inbox"
+### 3. Session-Aware Notification
 
-# Send Enter key SEPARATELY (required for execution)
+**IF session exists → notify:**
+```bash
+tmux send-keys -t <session-name> "New mail from <your-role>. Check: gt mail inbox"
 tmux send-keys -t <session-name> Enter
 ```
 
-### 4. Verify Notification Sent
-Check that tmux command returned successfully (exit code 0).
+**IF no session → handle by recipient type:**
+
+| Recipient Type | No Session Behavior |
+|----------------|---------------------|
+| `crew/<name>` | **Silent** - expected, mail waits for human's next session |
+| `polecats/<name>` | **Escalate to Witness** - polecat should be running |
+| `witness` | **Escalate to Mayor** - witness should be running |
+| `refinery` | **Escalate to Mayor** - refinery should be running |
+| `overseer` | **Silent** - human checks proactively |
+
+### 4. Escalation Flow (when session down)
+
+```
+Polecat down    → notify Witness (rig-level respawn)
+Witness down    → notify Mayor (cross-rig coordination)
+Refinery down   → notify Mayor
+Mayor down      → notify Overseer (human intervention)
+```
+
+**Escalation mail format:**
+```bash
+gt mail send <escalation-target> \
+  -s "⚠️ Session down: <original-recipient>" \
+  -m "Attempted to notify <session-name> but session not found.
+Original mail subject: <subject>
+Action needed: Respawn session or reassign work."
+```
+
+### 5. Priority Handling
+
+Use subject prefixes for urgency:
+- `🔴 URGENT:` - Escalate immediately if can't deliver
+- `🟡 ACTION:` - Best effort notification
+- Default - Normal handling
+
+---
+
+## 📬 When to Use Each Recipient
+
+| Need | Recipient | Behavior |
+|------|-----------|----------|
+| Async note for human's next rig session | `crew/<name>` | Silent wait (expected) |
+| Human attention NOW | `overseer` | Human checks proactively |
+| Autonomous action in rig | `polecats/<name>` | Notify, escalate if down |
+| Rig coordination | `witness` | Notify, escalate to Mayor if down |
+| Merge queue | `refinery` | Notify, escalate to Mayor if down |
 
 ---
 
 ## ⚠️ Why This Matters
 
-**Without tmux notification:**
-- Mail sits unread indefinitely
-- Agents don't auto-poll mail
+**Without session-aware handling:**
+- Mail to dead polecat sits forever with no alert
+- Sender thinks notification worked
 - Work stalls silently
-- No error messages
-- Pipeline blocks waiting for responses
+- No escalation path
 
 **This is a resilience-by-design requirement:**
-- No single point of failure: Mail persists even if notification fails
-- Observability: Both audit trail (mail) and immediate alert (tmux)
-- Self-healing: Agent checks mail on next prompt if notification missed
+- No single point of failure: Mail persists, escalation catches failures
+- Observability: Session state checked, failures logged
+- Self-healing: Escalation triggers respawn or reassignment
 
 ---
 

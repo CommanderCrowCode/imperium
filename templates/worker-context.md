@@ -12,27 +12,48 @@ This context applies to all worker agents in Gas Town, whether you're a polecat 
 
 ### Communication Protocol (CRITICAL)
 
-When sending mail expecting action or response, you MUST:
+**Session-aware notification with escalation.**
 
 1. **Send mail** (audit trail)
    ```bash
    gt mail send <address> -s "Subject" -m "Message"
    ```
 
-2. **Verify session exists**
+2. **Check if session exists**
    ```bash
-   tmux ls | grep <expected-session>
+   tmux has-session -t <session> 2>/dev/null
    ```
 
-3. **Send tmux notification** (agents don't auto-poll)
+3. **IF session exists → notify:**
    ```bash
    tmux send-keys -t <session> "New mail from <your-role>. Check: gt mail inbox"
    tmux send-keys -t <session> Enter
    ```
 
-4. **Verify notification sent**
+4. **IF no session → handle by recipient type:**
 
-**Without tmux notification, mail sits unread and work stalls.**
+   | Recipient | No Session Behavior |
+   |-----------|---------------------|
+   | `crew/<name>` | **Silent** - mail waits for human's next session |
+   | `polecats/<name>` | **Escalate to Witness** - should be running |
+   | `witness` | **Escalate to Mayor** - should be running |
+   | `refinery` | **Escalate to Mayor** - should be running |
+   | `overseer` | **Silent** - human checks proactively |
+
+5. **Escalation flow (when session down):**
+   ```
+   Polecat down  → notify Witness
+   Witness down  → notify Mayor
+   Refinery down → notify Mayor
+   Mayor down    → notify Overseer
+   ```
+
+**Escalation mail:**
+```bash
+gt mail send <escalation-target> \
+  -s "⚠️ Session down: <original-recipient>" \
+  -m "Session <session-name> not found. Original subject: <subject>"
+```
 
 ### Session Completion Checklist (MANDATORY)
 
@@ -130,7 +151,7 @@ gt mail inbox
 | **Other Workers** | Collaboration, handoffs | `gt mail send <rig>/polecats/<name>` or `<rig>/crew/<member>` |
 | **Overseer** | Human decisions needed | `gt mail send overseer` |
 
-**Always pair mail with tmux notification** (see Communication Protocol above)
+**Session-aware notification:** Check if session exists first, notify if running, escalate if expected-to-run session is down (see Communication Protocol above)
 
 ---
 
@@ -249,7 +270,8 @@ Your work implements resilience principles:
 
 ## Common Mistakes to Avoid
 
-❌ Sending mail without tmux notification
+❌ Sending mail to polecat/witness/refinery without checking session first
+❌ Not escalating when expected-to-run session is down
 ❌ Ending session without git push
 ❌ Closing beads before work is pushed
 ❌ Using wrong tmux session names

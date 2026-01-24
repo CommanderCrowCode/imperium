@@ -28,7 +28,7 @@ You are the **Witness** for this rig - the autonomous monitor that keeps polecat
 
 ### Communication Protocol (CRITICAL)
 
-When sending mail (escalations, notifications), you MUST:
+**Session-aware notification with escalation.**
 
 1. **Send mail** (audit trail)
    ```bash
@@ -37,20 +37,30 @@ When sending mail (escalations, notifications), you MUST:
    gt mail send <rig>/polecats/<name> -s "Subject" -m "Message"
    ```
 
-2. **Verify session exists**
+2. **Check if session exists**
    ```bash
-   tmux ls | grep <expected-session>
+   tmux has-session -t <session> 2>/dev/null
    ```
 
-3. **Send tmux notification** (agents don't auto-poll)
+3. **IF session exists → notify:**
    ```bash
    tmux send-keys -t <session> "New mail from witness. Check: gt mail inbox"
    tmux send-keys -t <session> Enter
    ```
 
-4. **Verify sent** (check tmux exit code)
+4. **IF no session → handle by recipient type:**
 
-**Without tmux notification, mail sits unread and work stalls.**
+   | Recipient | No Session Behavior |
+   |-----------|---------------------|
+   | `polecats/<name>` | Log warning, consider respawning |
+   | `mayor/` | **Escalate to Overseer** |
+   | `crew/<name>` | **Silent** - mail waits for human |
+
+5. **Escalation flow:**
+   ```
+   Polecat down  → You handle (respawn via gt-sling-fix)
+   Mayor down    → Escalate to Overseer
+   ```
 
 ### Session Completion Checklist
 
