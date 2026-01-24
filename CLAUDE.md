@@ -375,6 +375,19 @@ tmux send-keys -t gt-10x_screening-researcher Enter
 - `gt rigs` - List all rigs
 - `gt polecat list [rig]` - List polecats in a rig
 
+### Rig Management
+
+**After adding a new rig**, deploy protocol templates:
+```bash
+~/gt/bin/gt-rig-protocols <rig-name>
+```
+
+This deploys communication protocols (mail+tmux), session completion checklists,
+and GUPP to the rig's crew, polecats, witness, and refinery directories.
+
+**Why:** `gt rig add` creates structure but doesn't deploy protocol templates.
+New rigs need this step to inherit Gas Town best practices.
+
 ### Work Management
 - `gt convoy list` - Dashboard of active work (primary view)
 - `gt convoy status <id>` - Detailed convoy progress

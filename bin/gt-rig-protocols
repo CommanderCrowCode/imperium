@@ -1,0 +1,70 @@
+#!/bin/bash
+# Deploy Gas Town protocol templates to a rig
+# Usage: gt-rig-protocols <rig-name>
+#
+# Deploys:
+#   - worker-context.md  → crew/.claude/CLAUDE.md, polecats/.claude/CLAUDE.md
+#   - witness-context.md → witness/.claude/CLAUDE.md
+#   - refinery-context.md → refinery/.claude/CLAUDE.md
+
+set -euo pipefail
+
+TOWN_ROOT="${TOWN_ROOT:-$HOME/gt}"
+TEMPLATES="$TOWN_ROOT/templates"
+
+if [[ $# -lt 1 ]]; then
+    echo "Usage: gt-rig-protocols <rig-name>"
+    echo ""
+    echo "Deploys protocol templates to a rig's agent directories."
+    echo ""
+    echo "Available rigs:"
+    ls -1 "$TOWN_ROOT" | grep -v -E "^(bin|mayor|templates|plugins|\.)" | sed 's/^/  /'
+    exit 1
+fi
+
+RIG_NAME="$1"
+RIG_PATH="$TOWN_ROOT/$RIG_NAME"
+
+if [[ ! -d "$RIG_PATH" ]]; then
+    echo "Error: Rig '$RIG_NAME' not found at $RIG_PATH"
+    exit 1
+fi
+
+# Check templates exist
+if [[ ! -f "$TEMPLATES/worker-context.md" ]]; then
+    echo "Error: worker-context.md not found in $TEMPLATES"
+    exit 1
+fi
+
+echo "Deploying protocols to rig: $RIG_NAME"
+
+# Deploy worker context to crew
+if [[ -d "$RIG_PATH/crew" ]]; then
+    mkdir -p "$RIG_PATH/crew/.claude"
+    cp "$TEMPLATES/worker-context.md" "$RIG_PATH/crew/.claude/CLAUDE.md"
+    echo "  ✓ crew/.claude/CLAUDE.md"
+fi
+
+# Deploy worker context to polecats
+if [[ -d "$RIG_PATH/polecats" ]]; then
+    mkdir -p "$RIG_PATH/polecats/.claude"
+    cp "$TEMPLATES/worker-context.md" "$RIG_PATH/polecats/.claude/CLAUDE.md"
+    echo "  ✓ polecats/.claude/CLAUDE.md"
+fi
+
+# Deploy witness context
+if [[ -d "$RIG_PATH/witness" ]]; then
+    mkdir -p "$RIG_PATH/witness/.claude"
+    cp "$TEMPLATES/witness-context.md" "$RIG_PATH/witness/.claude/CLAUDE.md"
+    echo "  ✓ witness/.claude/CLAUDE.md"
+fi
+
+# Deploy refinery context
+if [[ -d "$RIG_PATH/refinery" ]]; then
+    mkdir -p "$RIG_PATH/refinery/.claude"
+    cp "$TEMPLATES/refinery-context.md" "$RIG_PATH/refinery/.claude/CLAUDE.md"
+    echo "  ✓ refinery/.claude/CLAUDE.md"
+fi
+
+echo ""
+echo "Done. Protocol templates deployed to $RIG_NAME"
