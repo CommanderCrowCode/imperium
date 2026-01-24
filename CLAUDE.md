@@ -388,6 +388,40 @@ and GUPP to the rig's crew, polecats, witness, and refinery directories.
 **Why:** `gt rig add` creates structure but doesn't deploy protocol templates.
 New rigs need this step to inherit Gas Town best practices.
 
+### Protocol Updates (Town-Wide)
+
+**When deploying protocol updates to all rigs:**
+
+1. **Update templates** in `~/gt/templates/`
+2. **Deploy to all rigs:**
+   ```bash
+   for rig in $(ls -d ~/gt/*/ | xargs -I{} basename {}); do
+     ~/gt/bin/gt-rig-protocols "$rig" 2>/dev/null
+   done
+   ```
+3. **Commit and push** templates to town repo
+
+**CRITICAL: Active sessions won't see updates until restart.**
+
+| Command | Reloads `.claude/CLAUDE.md`? | Use Case |
+|---------|------------------------------|----------|
+| `gt prime` | ❌ No - just prints text | Context injection |
+| `gt handoff` | ✅ Yes - fresh Claude instance | Protocol reload |
+
+**To propagate updates to active sessions:**
+```bash
+# List active sessions
+tmux ls | grep "^gt-"
+
+# Nudge each to handoff
+tmux send-keys -t <session> "PROTOCOL UPDATE: Run 'gt handoff' to reload."
+tmux send-keys -t <session> Enter
+```
+
+**Why `gt prime` doesn't work:** It only outputs text to stdout. Claude Code
+loads `.claude/CLAUDE.md` at session start, not when `gt prime` runs.
+Only a fresh session (via `gt handoff`) reloads the protocol files.
+
 ### Work Management
 - `gt convoy list` - Dashboard of active work (primary view)
 - `gt convoy status <id>` - Detailed convoy progress
