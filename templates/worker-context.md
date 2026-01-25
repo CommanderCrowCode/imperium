@@ -312,9 +312,51 @@ go vet ./...
 
 ---
 
-## Session End Example
+## 🚨 POLECAT SESSION END (CRITICAL)
 
-**Good session end:**
+**Polecats MUST use `gt done` to complete work. This is NON-NEGOTIABLE.**
+
+`gt done` is the ONLY valid way for polecats to complete work because it:
+1. ✅ Verifies commits exist and are pushed (prevents lost work)
+2. ✅ Creates MR bead for Refinery to process
+3. ✅ Notifies Witness of completion
+4. ✅ Closes the hooked bead automatically
+5. ✅ Terminates the session cleanly
+
+**Polecat session end:**
+```bash
+# 1. File any additional work discovered
+bd create --title="..." --type=task
+
+# 2. Run quality gates
+uv run pytest  # All pass ✓
+
+# 3. Commit and push your work
+git add .
+git commit -m "furiosa: Fix authentication bug"
+git push  # MUST succeed before gt done
+
+# 4. Submit to merge queue and exit
+gt done   # ← THIS IS MANDATORY FOR POLECATS
+          # Verifies push, creates MR, notifies Witness, exits session
+```
+
+**What `gt done` does:**
+- Checks branch has commits ahead of main
+- Pushes branch if not already pushed
+- Creates merge-request bead for Refinery
+- Notifies Witness of completion
+- Cleans up worktree
+- Kills session
+
+**DO NOT use `bd close` directly!** It bypasses verification and your work will be lost.
+
+---
+
+## Crew Session End (Different from Polecats)
+
+**Crew push directly to main and can use manual workflow:**
+
 ```bash
 # 1. File remaining work
 bd create --title="Add error handling to API" --type=task
@@ -322,36 +364,54 @@ bd create --title="Add error handling to API" --type=task
 # 2. Run quality gates
 uv run pytest  # All pass ✓
 
-# 3. Update bead
-bd close mi-xyz  # My completed work
+# 3. Close completed beads
+bd close mi-xyz
 
-# 4. Push to remote
+# 4. Push to remote (direct to main)
 git pull --rebase
 bd sync
 git add .
-git commit -m "audio: Regenerate Week 0 audio with markers"
+git commit -m "planner: Add Week 1 schedule"
 bd sync
 git push
 git status  # ✓ up to date with origin/main
 
-# 5. No mail sent (skip)
-
-# 6. Clean up
-git stash list  # Empty ✓
-
-# 7. No handoff needed (work complete)
+# 5. Hand off if work incomplete
+gt handoff -m "Continue with phase 2"
 ```
 
-**Bad session end (DO NOT DO THIS):**
+---
+
+## Common Session End Mistakes
+
+**❌ WRONG (Polecat):**
 ```bash
-# Closes bead before pushing
+# Closes bead manually - bypasses verification!
 bd close mi-xyz
 
-# Never pushes
-# Leaves work stranded locally
-# Session ends
+# Claims work done but no git push
+# Session ends with nothing committed
 
-# ❌ WRONG - Work lost on session restart
+# ❌ Work lost forever - branch never existed
+```
+
+**❌ WRONG (Polecat):**
+```bash
+# Pushes but doesn't call gt done
+git push
+
+# No MR bead created
+# Refinery never processes the branch
+# Work sits on branch forever
+
+# ❌ Use gt done instead
+```
+
+**✅ CORRECT (Polecat):**
+```bash
+git add . && git commit -m "fix: resolve 403 errors"
+git push
+gt done   # ← Required for polecats
 ```
 
 ---
