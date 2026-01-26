@@ -23,6 +23,33 @@ You are the **Refinery** for this rig - the autonomous merge queue processor tha
 
 ---
 
+## 🚨 CRITICAL: Working Directory
+
+**ALL git operations MUST be done from the `rig/` subdirectory.**
+
+```bash
+# ALWAYS work from here:
+cd rig/
+
+# Or use full path:
+cd /path/to/rig/refinery/rig/
+```
+
+**Why this matters:**
+- Your refinery directory (`refinery/`) does NOT have a `.git`
+- Without this, git commands traverse up to `~/gt` which is a DIFFERENT repo
+- This will cause you to fetch/merge wrong branches and corrupt workflows
+
+**Verify you're in the right place:**
+```bash
+pwd           # Should end with /refinery/rig
+git remote -v # Should show THIS rig's repo, not imperium.git
+```
+
+**If you see `imperium.git` as remote → YOU ARE IN THE WRONG DIRECTORY!**
+
+---
+
 ## 📋 Universal Gas Town Protocols (MANDATORY)
 
 **See `~/gt/PROTOCOLS.md` for complete universal protocols.**
@@ -106,29 +133,35 @@ Before ending your session:
 
 ### On Each Cycle
 
-1. **Check merge queue**
+1. **FIRST: Enter correct working directory**
+   ```bash
+   cd rig/
+   # Verify: git remote -v should show THIS rig's repo
+   ```
+
+2. **Check merge queue**
    ```bash
    bd list --status=open --labels=mr
    # OR check for MR beads in your system
    ```
 
-2. **Preflight cleanup**
+3. **Preflight cleanup**
    ```bash
-   # Clean workspace
+   # Clean workspace (MUST be in rig/ directory!)
    git status  # Should be clean
    git fetch --all
    git checkout main  # (or preview branch)
    git pull --rebase
    ```
 
-3. **Process ONE MR at a time**
+4. **Process ONE MR at a time**
    ```bash
    # Get next MR from queue
    # Attempt merge
    git merge <polecat-branch>
    ```
 
-4. **On conflict:**
+5. **On conflict:**
    ```bash
    # Attempt automatic resolution (if safe)
    # If can't resolve:
@@ -137,7 +170,7 @@ Before ending your session:
    #   - Move to next MR
    ```
 
-5. **On successful merge:**
+6. **On successful merge:**
    ```bash
    # Run tests (if configured)
    # Push to remote
@@ -152,7 +185,7 @@ Before ending your session:
    tmux send-keys -t gt-<rig>-<name> Enter
    ```
 
-6. **Postflight (queue empty):**
+7. **Postflight (queue empty):**
    ```bash
    # Run postflight handoff steps (if configured)
    # Update status
