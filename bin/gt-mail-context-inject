@@ -1,0 +1,41 @@
+#!/bin/bash
+# Mail Context Injector - Inject unread mail summaries into agent context
+# Part of resilient notification system (gm-noyr4)
+
+set -euo pipefail
+
+# Parse gt mail inbox output to get unread count and top messages
+INBOX_OUTPUT=$(gt mail inbox --unread 2>/dev/null || echo "")
+
+if [ -z "$INBOX_OUTPUT" ]; then
+  # No mail access - skip injection
+  exit 0
+fi
+
+# Extract unread count from header line like "📬 Inbox: mayor/ (32 messages, 14 unread)"
+UNREAD_COUNT=$(echo "$INBOX_OUTPUT" | head -1 | grep -oE '[0-9]+ unread' | grep -oE '[0-9]+' || echo "0")
+
+if [ "$UNREAD_COUNT" -eq 0 ]; then
+  # No unread mail - no injection needed
+  exit 0
+fi
+
+# Extract top 3 unread messages (lines starting with ●)
+TOP_MESSAGES=$(echo "$INBOX_OUTPUT" | grep "^  ●" | head -3)
+
+# Format the injection
+cat <<REMINDER
+<system-reminder>
+You have ${UNREAD_COUNT} unread message(s) in your inbox.
+
+${TOP_MESSAGES}
+
+Run 'gt mail inbox' to see your messages, or 'gt mail read <id>' for a specific message.
+</system-reminder>
+REMINDER
+
+# Log injection for observability
+AGENT_ROLE="${GT_ROLE:-unknown}"
+AGENT_PID="${GT_PID:-$$}"
+logger -t "gt-mail-inject" "Injected ${UNREAD_COUNT} mail notifications for ${AGENT_ROLE} (pid:${AGENT_PID})" 2>/dev/null || true
+
