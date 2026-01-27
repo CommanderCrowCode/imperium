@@ -66,8 +66,8 @@ run_watcher() {
     TIMEDIR="/tmp/gt-auto-enter-times"
     mkdir -p "$STATEDIR" "$TIMEDIR"
 
-    # Crew idle threshold: 10 minutes (600 seconds)
-    CREW_IDLE_THRESHOLD=600
+    # Crew idle threshold: 5 minutes (300 seconds)
+    CREW_IDLE_THRESHOLD=300
 
     while true; do
         # Get all gt-* sessions (excluding mayor only - crew handled separately)
@@ -104,7 +104,7 @@ run_watcher() {
                         echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🔄 Sending Enter to $session"
                         tmux send-keys -t "$session" Enter 2>/dev/null
                     else
-                        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⏳ Crew $session has pending prompt (waiting 10min)"
+                        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⏳ Crew $session has pending prompt (waiting 5min)"
                     fi
                 else
                     # Same prompt text - check if crew has exceeded threshold
