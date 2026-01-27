@@ -1,6 +1,14 @@
 {
   "version": 1,
   "rigs": {
+    "ananda_consulting": {
+      "git_url": "git@github.com:Lumicello/ananda_consulting.git",
+      "added_at": "2026-01-23T10:59:43.159568+07:00",
+      "beads": {
+        "repo": "",
+        "prefix": "ac"
+      }
+    },
     "commander_crow": {
       "git_url": "git@github.com:CommanderCrowCode/commander_crow.git",
       "added_at": "2026-01-09T20:52:41.556458+07:00",
@@ -71,6 +79,14 @@
       "beads": {
         "repo": "",
         "prefix": "scripts"
+      }
+    },
+    "vector": {
+      "git_url": "git@github.com:CommanderCrowCode/vector.git",
+      "added_at": "2026-01-24T12:11:31.938974+07:00",
+      "beads": {
+        "repo": "",
+        "prefix": "ve"
       }
     },
     "watchtower": {
