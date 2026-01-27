@@ -61,15 +61,25 @@ status_daemon() {
 run_watcher() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] gt-auto-enter started"
 
-    # Simple approach: track last state per session in temp files
+    # Track state and timestamps per session
     STATEDIR="/tmp/gt-auto-enter-state"
-    mkdir -p "$STATEDIR"
+    TIMEDIR="/tmp/gt-auto-enter-times"
+    mkdir -p "$STATEDIR" "$TIMEDIR"
+
+    # Crew idle threshold: 10 minutes (600 seconds)
+    CREW_IDLE_THRESHOLD=600
 
     while true; do
-        # Get all gt-* sessions, excluding crew (human-controlled) and mayor (human-controlled)
-        sessions=$(tmux list-sessions 2>/dev/null | grep "^gt-" | cut -d: -f1 | grep -v -E "crew|hq-mayor")
+        # Get all gt-* sessions (excluding mayor only - crew handled separately)
+        all_sessions=$(tmux list-sessions 2>/dev/null | grep "^gt-" | cut -d: -f1 | grep -v "hq-mayor")
 
-        for session in $sessions; do
+        for session in $all_sessions; do
+            # Determine if this is a crew session
+            is_crew=false
+            if echo "$session" | grep -q "crew"; then
+                is_crew=true
+            fi
+
             # Capture last few lines of the session
             output=$(tmux capture-pane -t "$session" -p 2>/dev/null | tail -5)
 
@@ -81,17 +91,41 @@ run_watcher() {
 
                 # Create safe filename from session name
                 session_file="$STATEDIR/$(echo "$session" | tr '/' '_')"
+                time_file="$TIMEDIR/$(echo "$session" | tr '/' '_')"
 
-                # Check if this is a new state
+                # Check if this is a new state or same state
                 if [ ! -f "$session_file" ] || [ "$(cat "$session_file" 2>/dev/null)" != "$prompt_line" ]; then
-                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🔄 Sending Enter to $session"
-                    tmux send-keys -t "$session" Enter 2>/dev/null
+                    # New prompt text - record timestamp and state
                     echo "$prompt_line" > "$session_file"
+                    date +%s > "$time_file"
+
+                    if [ "$is_crew" = false ]; then
+                        # Non-crew: auto-enter immediately
+                        echo "[$(date '+%Y-%m-%d %H:%M:%S')] 🔄 Sending Enter to $session"
+                        tmux send-keys -t "$session" Enter 2>/dev/null
+                    else
+                        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⏳ Crew $session has pending prompt (waiting 10min)"
+                    fi
+                else
+                    # Same prompt text - check if crew has exceeded threshold
+                    if [ "$is_crew" = true ] && [ -f "$time_file" ]; then
+                        first_seen=$(cat "$time_file")
+                        now=$(date +%s)
+                        idle_seconds=$((now - first_seen))
+
+                        if [ "$idle_seconds" -ge "$CREW_IDLE_THRESHOLD" ]; then
+                            echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⏰ Crew $session idle for ${idle_seconds}s - sending Enter"
+                            tmux send-keys -t "$session" Enter 2>/dev/null
+                            # Reset timer so we don't spam
+                            date +%s > "$time_file"
+                        fi
+                    fi
                 fi
             else
                 # Clear state when session is at clean prompt or working
                 session_file="$STATEDIR/$(echo "$session" | tr '/' '_')"
-                rm -f "$session_file" 2>/dev/null
+                time_file="$TIMEDIR/$(echo "$session" | tr '/' '_')"
+                rm -f "$session_file" "$time_file" 2>/dev/null
             fi
         done
 
