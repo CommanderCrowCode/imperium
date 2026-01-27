@@ -50,6 +50,19 @@ else
     echo "   ⚠️  gt-witness-scheduler not found - witness patrols won't auto-run"
 fi
 
+# Mail context injection - runs via Claude Code SessionStart hook
+# Part of resilience-by-design: ensures agents see unread mail notifications
+if [ -f ~/gt/bin/gt-mail-context-inject ]; then
+    if grep -q "gt-mail-context-inject" ~/.claude/settings.json 2>/dev/null; then
+        echo "   ✅ gt-mail-context-inject configured in Claude Code hooks"
+    else
+        echo "   ⚠️  gt-mail-context-inject exists but NOT in ~/.claude/settings.json"
+        echo "       Add to SessionStart hooks to enable mail notifications"
+    fi
+else
+    echo "   ⚠️  gt-mail-context-inject not found - agents won't see mail context"
+fi
+
 echo ""
 echo "✅ Gas Town fully started"
 echo ""
