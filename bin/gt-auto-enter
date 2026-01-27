@@ -80,8 +80,8 @@ run_watcher() {
                 is_crew=true
             fi
 
-            # Capture last few lines of the session
-            output=$(tmux capture-pane -t "$session" -p 2>/dev/null | tail -5)
+            # Capture last 20 lines of the session (more than 5 to catch prompts above task lists)
+            output=$(tmux capture-pane -t "$session" -p 2>/dev/null | tail -20)
 
             # Check if there's text at the prompt (not INSERT mode, not empty)
             # Pattern: "❯ [some text]" at the end, without "-- INSERT --"
