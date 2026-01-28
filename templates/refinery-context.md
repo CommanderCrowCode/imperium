@@ -286,14 +286,24 @@ Your role implements resilience principles:
 gt hook
 
 # 2. If work hooked → RUN IT immediately
-# 3. If no work → Check mail for instructions
+
+# 3. If no hook → Check mail for context and actionable work
 gt mail inbox
 
-# 4. If no mail → Check merge queue
+# 4. Read recent messages (3-5 most recent)
+#    Look for:
+#    - 🤝 HANDOFF messages (continue previous work)
+#    - MR ready notifications
+#    - Merge conflict escalations
+#    - Priority merge requests
+
+# 5. If actionable work found → EXECUTE IT
+
+# 6. If no actionable work → Check merge queue
 bd list --status=open --labels=mr
 
-# 5. If queue has work → Process queue workflow
-# 6. If queue empty → Exponential backoff (check less frequently)
+# 7. If queue has work → Process queue workflow
+# 8. If queue empty → Exponential backoff (check less frequently)
 ```
 
 ---

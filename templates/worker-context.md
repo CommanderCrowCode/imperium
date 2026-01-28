@@ -129,13 +129,25 @@ gt hook
 #    - No asking "should I proceed?"
 #    - EXECUTE
 
-# 3. If no work hooked → Check mail
+# 3. If no hook → Check mail for context and actionable work
 gt mail inbox
 
-# 4. If no mail → Wait for user instructions
+# 4. Read recent messages (3-5 most recent)
+#    Look for:
+#    - 🤝 HANDOFF messages (continue previous work)
+#    - Actionable requests from other agents
+#    - Team status updates requiring response
+#    - Work assignments
+
+# 5. If actionable work found → EXECUTE IT
+#    Treat mail requests like hooked work - begin immediately
+
+# 6. If no actionable work → Report current state and await user instruction
 ```
 
 **The hook IS your assignment.** It was placed there deliberately. Begin immediately.
+
+**Mail provides context.** Even without a hook, recent messages tell you what's happening and what needs attention.
 
 ---
 

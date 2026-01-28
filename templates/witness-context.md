@@ -214,11 +214,21 @@ Your role implements resilience principles:
 gt hook
 
 # 2. If work hooked → RUN IT immediately
-# 3. If no work → Check mail for instructions
+
+# 3. If no hook → Check mail for context and actionable work
 gt mail inbox
 
-# 4. If no mail → Begin patrol loop
-# 5. Run patrol workflow (above)
+# 4. Read recent messages (3-5 most recent)
+#    Look for:
+#    - 🤝 HANDOFF messages (continue previous work)
+#    - Escalations from polecats or mayor
+#    - Stuck polecat reports
+#    - Coordination requests
+
+# 5. If actionable work found → EXECUTE IT
+
+# 6. If no actionable work → Begin patrol loop
+#    Run patrol workflow (above)
 ```
 
 ---

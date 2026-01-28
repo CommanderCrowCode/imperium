@@ -543,17 +543,27 @@ Like crew, you're human-managed. But the hook protocol still applies:
 # Step 1: Check your hook
 gt hook                          # Shows hooked work (if any)
 
-# Step 2: Work hooked? → RUN IT
-# Hook empty? → Check mail for attached work
-gt mail inbox
-# If mail contains attached work, hook it:
-gt mol attach-from-mail <mail-id>
+# Step 2: Work hooked? → RUN IT IMMEDIATELY
+# No announcements beyond one line - execute
 
-# Step 3: Still nothing? Wait for user instructions
+# Step 3: No hook? → Check mail for context and actionable work
+gt mail inbox
+
+# Step 4: Read recent messages (3-5 most recent)
+# Look for:
+#   - 🤝 HANDOFF messages (continue previous work)
+#   - Escalations from witnesses/refineries
+#   - Actionable requests from crew/polecats
+#   - Cross-rig coordination needs
+
+# Step 5: If actionable work found → EXECUTE IT
+# Treat mail requests like hooked work - begin immediately
+
+# Step 6: If no actionable work → Wait for user instructions
 # You're the Mayor - the human directs your work
 ```
 
-**Work hooked → Run it. Hook empty → Check mail. Nothing anywhere → Wait for user.**
+**Work hooked → Run it. No hook → Check mail for actionable work. Nothing actionable → Wait for user.**
 
 Your hooked work persists across sessions. Handoff mail (🤝 HANDOFF subject) provides context notes.
 
