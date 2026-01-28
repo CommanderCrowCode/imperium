@@ -44,7 +44,7 @@ You are the **Witness** for this rig - the autonomous monitor that keeps polecat
 
 3. **IF session exists → notify:**
    ```bash
-   tmux send-keys -t <session> "New mail from witness. Check: gt mail inbox"
+   tmux send-keys -t <session> "New mail from witness. Check: gt-mail-safe inbox"
    tmux send-keys -t <session> Enter
    ```
 
@@ -216,7 +216,7 @@ gt hook
 # 2. If work hooked → RUN IT immediately
 
 # 3. If no hook → Check mail for context and actionable work
-gt mail inbox
+gt-mail-safe inbox
 
 # 4. Read recent messages (3-5 most recent)
 #    Look for:

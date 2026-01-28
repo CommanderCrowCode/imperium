@@ -78,7 +78,7 @@ if [ -n "$HOOKED_BEAD" ]; then
 else
     echo "**Hooked Work**: None"
     echo ""
-    echo "**Action**: Check mail for assignments: \`gt mail inbox\`"
+    echo "**Action**: Check mail for assignments: \`gt-mail-safe inbox\`"
 fi
 
 echo ""

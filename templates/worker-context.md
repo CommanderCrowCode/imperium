@@ -26,7 +26,7 @@ This context applies to all worker agents in Gas Town, whether you're a polecat 
 
 3. **IF session exists → notify:**
    ```bash
-   tmux send-keys -t <session> "New mail from <your-role>. Check: gt mail inbox"
+   tmux send-keys -t <session> "New mail from <your-role>. Check: gt-mail-safe inbox"
    tmux send-keys -t <session> Enter
    ```
 
@@ -130,7 +130,7 @@ gt hook
 #    - EXECUTE
 
 # 3. If no hook → Check mail for context and actionable work
-gt mail inbox
+gt-mail-safe inbox
 
 # 4. Read recent messages (3-5 most recent)
 #    Look for:
