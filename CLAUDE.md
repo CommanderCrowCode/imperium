@@ -498,6 +498,42 @@ Once resolved, I can sling this to a polecat.
 ```
 This ensures human-blocked work doesn't silently stall.
 
+### Starting Agent Sessions Manually
+
+**ALWAYS use `gt-spawn-agent` to start any agent session (crew, witness, refinery).**
+
+```bash
+# Spawn any agent with proper GUPP auto-execute
+~/gt/bin/gt-spawn-agent <agent-dir>
+
+# Examples:
+~/gt/bin/gt-spawn-agent ~/gt/flamingo_dominion/crew/deployment_master
+~/gt/bin/gt-spawn-agent ~/gt/vector/witness
+~/gt/bin/gt-spawn-agent ~/gt/psu_teaching/refinery
+```
+
+**Why `gt-spawn-agent` is required:**
+1. ✅ GUPP auto-execute (checks hook/mail immediately on startup)
+2. ✅ Identity detection via `gt-prime-safe` (avoids identity bugs)
+3. ✅ Vim-mode compatible (proper Enter key handling)
+4. ✅ Proper session naming (gt-<rig>-<role> format)
+5. ✅ Polecat limit checking (prevents overload)
+
+**DO NOT use manual tmux commands:**
+```bash
+# ❌ WRONG - bypasses all Gas Town startup protocols
+tmux new-session -s gt-rig-crew "claude"
+
+# ✅ CORRECT - uses standardized Gas Town startup
+~/gt/bin/gt-spawn-agent ~/gt/rig/crew/member
+```
+
+**Session naming:** `gt-spawn-agent` auto-derives correct names:
+- Crew: `gt-<rig>-crew` (not gt-<rig>-crew-<member>)
+- Witness: `gt-<rig>-witness`
+- Refinery: `gt-<rig>-refinery`
+- Polecats: Use `gt-sling-fix` instead (handles spawning)
+
 ### Rig Beads Database Audit
 
 Run this periodically to verify rig beads are configured correctly:
