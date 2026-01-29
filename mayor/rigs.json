@@ -9,6 +9,14 @@
         "prefix": "ac"
       }
     },
+    "cartographia": {
+      "git_url": "git@github.com:CommanderCrowCode/cartographia.git",
+      "added_at": "2026-01-29T14:05:06.135446+07:00",
+      "beads": {
+        "repo": "",
+        "prefix": "ca"
+      }
+    },
     "commander_crow": {
       "git_url": "git@github.com:CommanderCrowCode/commander_crow.git",
       "added_at": "2026-01-09T20:52:41.556458+07:00",
