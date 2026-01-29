@@ -270,6 +270,41 @@ These protocols implement Gas Town's resilience-by-design principles:
 
 ---
 
+## 🪝 Claude Code Hooks
+
+Gas Town uses Claude Code hooks to maintain agent awareness and inject context.
+
+### Hook Configuration
+
+Hooks are configured in `~/.claude/settings.json` (user-global) and apply to all Claude Code sessions.
+
+### Active Hooks
+
+| Hook Event | Script | Purpose |
+|------------|--------|---------|
+| `SessionStart` | `bd prime` | Load beads context on session start |
+| `SessionStart` | `~/gt/bin/gt-mail-context-inject` | Inject unread mail on session start |
+| `PreCompact` | `bd prime` | Preserve beads context before compaction |
+| `PostToolUse` | `~/gt/bin/gt-mail-posttool-hook` | Check for new mail during execution |
+
+### PostToolUse Mail Hook (Phase 2)
+
+The `gt-mail-posttool-hook` checks for new mail after every tool execution:
+
+- **Rate limited**: Only checks every 30 seconds (configurable via `CHECK_INTERVAL`)
+- **Deduplication**: Won't inject the same mail twice (content hash tracking)
+- **Identity-aware**: Detects agent identity from working directory
+- **Timeout**: 5 second max execution time
+
+**Benefits:**
+- Agents see urgent mail mid-execution (not just on prompt submit)
+- Better coordination between workers
+- Real-time awareness of escalations
+
+**Cache location:** `$TMPDIR/gt-mail-hook/`
+
+---
+
 ## 📝 Hook Injection Notes
 
 **For Gas Town maintainers:**

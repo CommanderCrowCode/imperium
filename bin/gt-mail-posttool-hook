@@ -1,0 +1,105 @@
+#!/bin/bash
+# PostToolUse hook for mail context injection
+# Checks for new mail after tool execution and injects into Claude's context
+# Part of Phase 2: ToolUse hook for mail injection (gm-m943b)
+#
+# Performance optimization: Only checks mail every CHECK_INTERVAL seconds
+# to avoid adding latency to every tool call (~0.9s per check)
+
+set -euo pipefail
+
+# Configuration
+CHECK_INTERVAL=30  # Check mail at most every 30 seconds
+CACHE_DIR="${TMPDIR:-/tmp}/gt-mail-hook"
+
+# Read hook input from stdin (Claude Code passes JSON)
+# Use timeout to avoid blocking if no input (e.g., when run manually)
+HOOK_INPUT=""
+if [ ! -t 0 ]; then
+  # stdin is not a terminal (i.e., piped input exists)
+  HOOK_INPUT=$(cat)
+fi
+
+# Extract session_id from JSON input, or use env var, or fallback to PID
+if [ -n "$HOOK_INPUT" ] && command -v jq >/dev/null 2>&1; then
+  SESSION_ID=$(echo "$HOOK_INPUT" | jq -r '.session_id // empty' 2>/dev/null || echo "")
+fi
+SESSION_ID="${SESSION_ID:-${CLAUDE_SESSION_ID:-$$}}"
+CACHE_FILE="${CACHE_DIR}/last_check_${SESSION_ID}"
+
+# Ensure cache directory exists
+mkdir -p "$CACHE_DIR"
+
+# Check if we should skip (checked recently)
+NOW=$(date +%s)
+if [ -f "$CACHE_FILE" ]; then
+  LAST_CHECK=$(cat "$CACHE_FILE" 2>/dev/null || echo 0)
+  ELAPSED=$((NOW - LAST_CHECK))
+  if [ "$ELAPSED" -lt "$CHECK_INTERVAL" ]; then
+    # Checked recently, skip to avoid latency
+    exit 0
+  fi
+fi
+
+# Record this check time
+echo "$NOW" > "$CACHE_FILE"
+
+# Detect identity from current working directory
+# Polecats: ~/gt/<rig>/polecats/<name> -> <rig>/polecats/<name>
+# Crew: ~/gt/<rig>/crew/<name> -> <rig>/crew/<name>
+# Mayor: ~/gt -> mayor/
+# Other: auto-detect
+
+CWD="${PWD}"
+GT_ROOT="${HOME}/gt"
+
+if [[ "$CWD" == "$GT_ROOT" ]]; then
+  IDENTITY="mayor/"
+elif [[ "$CWD" =~ ^${GT_ROOT}/([^/]+)/polecats/([^/]+) ]]; then
+  IDENTITY="${BASH_REMATCH[1]}/polecats/${BASH_REMATCH[2]}"
+elif [[ "$CWD" =~ ^${GT_ROOT}/([^/]+)/crew/([^/]+) ]]; then
+  IDENTITY="${BASH_REMATCH[1]}/crew/${BASH_REMATCH[2]}"
+else
+  # Let gt mail check auto-detect
+  IDENTITY=""
+fi
+
+# Build the command with optional identity
+if [ -n "$IDENTITY" ]; then
+  MAIL_OUTPUT=$(gt mail check --inject --identity "$IDENTITY" 2>/dev/null || echo "")
+else
+  MAIL_OUTPUT=$(gt mail check --inject 2>/dev/null || echo "")
+fi
+
+# If no mail output, exit silently
+if [ -z "$MAIL_OUTPUT" ]; then
+  exit 0
+fi
+
+# Check if this is the same mail we already injected
+MAIL_HASH=$(echo "$MAIL_OUTPUT" | md5 2>/dev/null || echo "$MAIL_OUTPUT" | md5sum | cut -d' ' -f1)
+HASH_FILE="${CACHE_DIR}/last_mail_hash_${SESSION_ID}"
+
+if [ -f "$HASH_FILE" ]; then
+  LAST_HASH=$(cat "$HASH_FILE" 2>/dev/null || echo "")
+  if [ "$MAIL_HASH" = "$LAST_HASH" ]; then
+    # Same mail as last time, don't spam
+    exit 0
+  fi
+fi
+
+# Record this mail hash
+echo "$MAIL_HASH" > "$HASH_FILE"
+
+# Output JSON with additionalContext for PostToolUse hooks
+# This injects the mail summary into Claude's context
+cat <<EOF
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PostToolUse",
+    "additionalContext": $(echo "$MAIL_OUTPUT" | jq -Rs .)
+  }
+}
+EOF
+
+exit 0

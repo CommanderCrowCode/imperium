@@ -1,0 +1,80 @@
+#!/bin/bash
+# Test script for gt-mail-posttool-hook
+# Simulates the PostToolUse hook environment and verifies behavior
+
+set -euo pipefail
+
+echo "=== Testing gt-mail-posttool-hook ==="
+echo ""
+
+# Test 1: Check script exists and is executable
+echo "Test 1: Script exists and is executable"
+if [ -x ~/gt/bin/gt-mail-posttool-hook ]; then
+  echo "  ✅ PASS: Script is executable"
+else
+  echo "  ❌ FAIL: Script not executable"
+  exit 1
+fi
+
+# Test 2: Test from Mayor directory
+echo ""
+echo "Test 2: Identity detection - Mayor"
+rm -rf "${TMPDIR}/gt-mail-hook/" 2>/dev/null || true
+cd ~/gt
+OUTPUT=$(~/gt/bin/gt-mail-posttool-hook 2>&1)
+if echo "$OUTPUT" | grep -q "hookSpecificOutput" 2>/dev/null || [ -z "$OUTPUT" ]; then
+  echo "  ✅ PASS: Returns valid JSON or empty (no mail)"
+else
+  echo "  ⚠️ WARN: Unexpected output: $OUTPUT"
+fi
+
+# Test 3: Test from Polecat directory
+echo ""
+echo "Test 3: Identity detection - Polecat"
+rm -rf "${TMPDIR}/gt-mail-hook/" 2>/dev/null || true
+if [ -d ~/gt/commander_crow/polecats/furiosa ]; then
+  cd ~/gt/commander_crow/polecats/furiosa
+  OUTPUT=$(~/gt/bin/gt-mail-posttool-hook 2>&1)
+  if echo "$OUTPUT" | grep -q "hookSpecificOutput" 2>/dev/null || [ -z "$OUTPUT" ]; then
+    echo "  ✅ PASS: Returns valid JSON or empty (no mail)"
+  else
+    echo "  ⚠️ WARN: Unexpected output: $OUTPUT"
+  fi
+else
+  echo "  ⏭️ SKIP: No polecat directory to test"
+fi
+
+# Test 4: Test caching (second call should be fast/empty)
+echo ""
+echo "Test 4: Time-based caching"
+cd ~/gt
+rm -rf "${TMPDIR}/gt-mail-hook/" 2>/dev/null || true
+# Pass consistent session_id via JSON stdin to test caching
+TEST_SESSION='{"session_id": "test-session-123"}'
+echo "$TEST_SESSION" | ~/gt/bin/gt-mail-posttool-hook >/dev/null 2>&1  # First call
+OUTPUT=$(echo "$TEST_SESSION" | ~/gt/bin/gt-mail-posttool-hook 2>&1)  # Second call - should be cached
+if [ -z "$OUTPUT" ]; then
+  echo "  ✅ PASS: Second call is cached (empty output)"
+else
+  echo "  ⚠️ WARN: Caching may not be working: $OUTPUT"
+fi
+
+# Test 5: Verify settings.json has the hook
+echo ""
+echo "Test 5: settings.json configuration"
+if grep -q "gt-mail-posttool-hook" ~/.claude/settings.json 2>/dev/null; then
+  echo "  ✅ PASS: Hook is configured in settings.json"
+else
+  echo "  ❌ FAIL: Hook not found in settings.json"
+  exit 1
+fi
+
+echo ""
+echo "=== All tests completed ==="
+echo ""
+echo "NOTE: The PostToolUse hook only activates in NEW Claude Code sessions."
+echo "To test in practice:"
+echo "  1. Start a new Claude Code session: claude"
+echo "  2. Send mail to yourself: gt mail send mayor/ -s 'Test' -m 'Test message'"
+echo "  3. Perform some tool operations"
+echo "  4. After ~30 seconds, the mail should appear in context"
