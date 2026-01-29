@@ -1,0 +1,198 @@
+#!/bin/bash
+# gt-notify-escalate: Escalate unread notifications that exceed timeout
+#
+# Usage: gt-notify-escalate              # Check all inboxes and escalate
+#        gt-notify-escalate --dry-run    # Report what would be escalated
+#        gt-notify-escalate --timeout=30 # Custom timeout in minutes (default: 60)
+#
+# Part of the defense-in-depth notification system:
+#   Layer 4: Escalation daemon - ensures messages eventually reach someone
+#
+# Escalation chain:
+#   polecats → witness
+#   witness → mayor
+#   refinery → mayor
+#   mayor → overseer
+#   crew → (no escalation - async by design)
+#   overseer → (no escalation - human endpoint)
+
+set -e
+
+GT_ROOT="${GT_ROOT:-$HOME/gt}"
+INBOX_ROOT="${AGENT_INBOX_ROOT:-$HOME/.agent-inbox}"
+
+# Default timeout: 60 minutes
+TIMEOUT_MINUTES=60
+DRY_RUN=false
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --timeout=*)
+            TIMEOUT_MINUTES="${1#*=}"
+            shift
+            ;;
+        *)
+            echo "Usage: gt-notify-escalate [--dry-run] [--timeout=MINUTES]" >&2
+            exit 1
+            ;;
+    esac
+done
+
+# Calculate cutoff timestamp
+CUTOFF_EPOCH=$(($(date +%s) - TIMEOUT_MINUTES * 60))
+CUTOFF_ISO=$(date -u -r "$CUTOFF_EPOCH" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || \
+             date -u -d "@$CUTOFF_EPOCH" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || \
+             echo "1970-01-01T00:00:00Z")
+
+echo "📊 Notification Escalation Check"
+echo "   Timeout: ${TIMEOUT_MINUTES} minutes"
+echo "   Cutoff: $CUTOFF_ISO"
+echo "   Mode: $(if $DRY_RUN; then echo 'DRY RUN'; else echo 'LIVE'; fi)"
+echo ""
+
+# Determine escalation target based on agent type
+get_escalation_target() {
+    local agent="$1"
+
+    case "$agent" in
+        */polecats/*)
+            # Polecats escalate to their rig's witness
+            local rig=$(echo "$agent" | cut -d'/' -f1)
+            echo "$rig/witness"
+            ;;
+        */witness)
+            echo "mayor/"
+            ;;
+        */refinery)
+            echo "mayor/"
+            ;;
+        mayor|mayor/)
+            echo "overseer"
+            ;;
+        */crew/*)
+            # Crew is async by design - no escalation
+            echo ""
+            ;;
+        overseer|overseer/)
+            # End of chain
+            echo ""
+            ;;
+        *)
+            echo "mayor/"  # Default escalation
+            ;;
+    esac
+}
+
+# Get agent address from inbox ID
+inbox_id_to_agent() {
+    local inbox_id="$1"
+    # Convert - back to /
+    echo "$inbox_id" | tr '-' '/'
+}
+
+# Check a single inbox for stale notifications
+check_inbox() {
+    local inbox_dir="$1"
+    local inbox_id=$(basename "$inbox_dir")
+    local inbox_file="$inbox_dir/notifications.jsonl"
+
+    if [[ ! -f "$inbox_file" ]]; then
+        return 0
+    fi
+
+    local agent=$(inbox_id_to_agent "$inbox_id")
+    local escalation_target=$(get_escalation_target "$agent")
+
+    # Find stale unread notifications
+    while IFS= read -r line; do
+        local status=$(echo "$line" | jq -r '.status' 2>/dev/null)
+        local timestamp=$(echo "$line" | jq -r '.timestamp' 2>/dev/null)
+        local notif_id=$(echo "$line" | jq -r '.id' 2>/dev/null)
+        local subject=$(echo "$line" | jq -r '.subject' 2>/dev/null)
+        local from=$(echo "$line" | jq -r '.from' 2>/dev/null)
+
+        # Skip read notifications
+        if [[ "$status" == "read" ]] || [[ "$status" == "escalated" ]]; then
+            continue
+        fi
+
+        # Check if notification is older than cutoff
+        # Convert timestamp to epoch for comparison
+        local notif_epoch
+        notif_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$timestamp" +%s 2>/dev/null || \
+                      date -d "$timestamp" +%s 2>/dev/null || \
+                      echo "0")
+
+        if [[ "$notif_epoch" -lt "$CUTOFF_EPOCH" ]]; then
+            echo "⚠️  Stale notification found:"
+            echo "   Agent: $agent"
+            echo "   ID: ${notif_id:0:8}"
+            echo "   Subject: $subject"
+            echo "   From: $from"
+            echo "   Time: $timestamp"
+
+            if [[ -z "$escalation_target" ]]; then
+                echo "   Escalation: (none - async endpoint)"
+                echo ""
+                continue
+            fi
+
+            echo "   Escalation target: $escalation_target"
+
+            if $DRY_RUN; then
+                echo "   Action: Would escalate (dry-run)"
+            else
+                # Send escalation notification
+                "$GT_ROOT/bin/gt-notify" "$escalation_target" \
+                    -s "⚠️ Unread notification for $agent (${TIMEOUT_MINUTES}m+)" \
+                    -m "Original notification unread for ${TIMEOUT_MINUTES}+ minutes.
+
+Agent: $agent
+Original from: $from
+Original subject: $subject
+Notification ID: $notif_id
+Time: $timestamp
+
+This notification has not been acknowledged. Please check on the agent or handle the request."
+
+                # Mark as escalated in original inbox
+                local temp_file=$(mktemp)
+                while IFS= read -r update_line; do
+                    local update_id=$(echo "$update_line" | jq -r '.id' 2>/dev/null)
+                    if [[ "$update_id" == "$notif_id" ]]; then
+                        echo "$update_line" | jq -c '.status = "escalated"'
+                    else
+                        echo "$update_line"
+                    fi
+                done < "$inbox_file" > "$temp_file"
+                mv "$temp_file" "$inbox_file"
+
+                echo "   Action: ✓ Escalated to $escalation_target"
+
+                # Log escalation
+                local log_dir="$INBOX_ROOT/.logs"
+                mkdir -p "$log_dir"
+                echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") | ESCALATED | $notif_id | $agent → $escalation_target | $subject" >> "$log_dir/escalations.log"
+            fi
+            echo ""
+        fi
+    done < "$inbox_file"
+}
+
+# Scan all inboxes
+ESCALATION_COUNT=0
+
+if [[ -d "$INBOX_ROOT" ]]; then
+    for inbox_dir in "$INBOX_ROOT"/*/; do
+        if [[ -d "$inbox_dir" ]]; then
+            check_inbox "$inbox_dir"
+        fi
+    done
+fi
+
+echo "Done."

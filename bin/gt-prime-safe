@@ -81,6 +81,23 @@ else
     echo "**Action**: Check mail for assignments: \`gt-mail-safe inbox\`"
 fi
 
+# Check for pending notifications (Layer 2 of defense-in-depth)
+if [ -f ".notification-pending" ]; then
+    echo "📬 **Pending Notifications Detected**"
+    echo ""
+
+    # Show pending notifications using gt-inbox-check
+    if command -v gt-inbox-check &> /dev/null; then
+        gt-inbox-check list 2>/dev/null || true
+    else
+        "$GT_ROOT/bin/gt-inbox-check" list 2>/dev/null || true
+    fi
+
+    # Remove the marker (notification was displayed)
+    rm -f ".notification-pending"
+    echo ""
+fi
+
 echo ""
 echo "---"
 echo ""

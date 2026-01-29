@@ -193,7 +193,8 @@ INBOX_DIR="$INBOX_ROOT/$INBOX_ID"
 mkdir -p "$INBOX_DIR"
 
 # Write notification to persistent queue (Layer 1)
-NOTIFICATION=$(jq -n \
+# Use -c for compact JSON (one line per record for JSONL format)
+NOTIFICATION=$(jq -nc \
     --arg id "$NOTIFICATION_ID" \
     --arg from "$SENDER" \
     --arg to "$RECIPIENT" \

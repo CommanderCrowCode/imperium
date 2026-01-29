@@ -1,0 +1,181 @@
+#!/bin/bash
+# gt-inbox-check: Read and acknowledge notifications from persistent queue
+#
+# Usage: gt-inbox-check              # Show unread notifications
+#        gt-inbox-check list         # Same as above
+#        gt-inbox-check ack <id>     # Mark notification as read
+#        gt-inbox-check ack-all      # Mark all as read
+#        gt-inbox-check count        # Count of unread notifications
+#
+# Part of the defense-in-depth notification system:
+#   Called by gt-prime-safe on startup when .notification-pending exists
+#   Also can be called periodically for Layer 4 polling
+
+set -e
+
+GT_ROOT="${GT_ROOT:-$HOME/gt}"
+INBOX_ROOT="${AGENT_INBOX_ROOT:-$HOME/.agent-inbox}"
+
+# Detect agent identity from CWD (same logic as gt-mail-safe)
+detect_agent() {
+    local pwd_path=$(pwd)
+
+    if [[ "$pwd_path" =~ $GT_ROOT/([^/]+)/(polecats|crew)/([^/]+) ]]; then
+        echo "${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
+    elif [[ "$pwd_path" =~ $GT_ROOT/([^/]+)/(witness) ]]; then
+        echo "${BASH_REMATCH[1]}/witness"
+    elif [[ "$pwd_path" =~ $GT_ROOT/([^/]+)/(refinery) ]]; then
+        echo "${BASH_REMATCH[1]}/refinery"
+    elif [[ "$pwd_path" == "$GT_ROOT/mayor" ]] || [[ "$pwd_path" =~ $GT_ROOT/mayor/ ]]; then
+        echo "mayor"
+    elif [[ "$pwd_path" == "$GT_ROOT/deacon" ]] || [[ "$pwd_path" =~ $GT_ROOT/deacon/ ]]; then
+        echo "deacon"
+    else
+        echo ""
+    fi
+}
+
+# Convert agent address to inbox ID
+agent_to_inbox_id() {
+    local agent="$1"
+    echo "$agent" | sed 's:/$::' | tr '/' '-'
+}
+
+# Get inbox file path
+get_inbox_file() {
+    local agent="$1"
+    local inbox_id=$(agent_to_inbox_id "$agent")
+    echo "$INBOX_ROOT/$inbox_id/notifications.jsonl"
+}
+
+# Show unread notifications
+show_unread() {
+    local inbox_file="$1"
+
+    if [[ ! -f "$inbox_file" ]]; then
+        echo "📭 No notifications"
+        return 0
+    fi
+
+    local unread=$(jq -r 'select(.status == "pending" or .status == "delivered")' "$inbox_file" 2>/dev/null)
+
+    if [[ -z "$unread" ]]; then
+        echo "📭 No unread notifications"
+        return 0
+    fi
+
+    echo "📬 Unread notifications:"
+    echo "─────────────────────────────────────"
+
+    echo "$unread" | jq -r '
+        "[\(.id | .[0:8])] From: \(.from)\n" +
+        "  Subject: \(.subject)\n" +
+        "  Time: \(.timestamp)\n" +
+        "  Message: \(.message[0:100])\(if (.message | length) > 100 then "..." else "" end)\n"
+    ' 2>/dev/null
+
+    local count=$(echo "$unread" | jq -s 'length')
+    echo "─────────────────────────────────────"
+    echo "Total: $count unread"
+}
+
+# Count unread notifications
+count_unread() {
+    local inbox_file="$1"
+
+    if [[ ! -f "$inbox_file" ]]; then
+        echo "0"
+        return 0
+    fi
+
+    jq -s '[.[] | select(.status == "pending" or .status == "delivered")] | length' "$inbox_file" 2>/dev/null || echo "0"
+}
+
+# Acknowledge a specific notification
+ack_notification() {
+    local inbox_file="$1"
+    local notif_id="$2"
+
+    if [[ ! -f "$inbox_file" ]]; then
+        echo "No inbox file found" >&2
+        return 1
+    fi
+
+    # Update status to "read" using temp file for atomicity
+    local temp_file=$(mktemp)
+
+    # Process each line, updating the matching one
+    while IFS= read -r line; do
+        local id=$(echo "$line" | jq -r '.id' 2>/dev/null)
+        if [[ "$id" == "$notif_id" ]] || [[ "${id:0:8}" == "$notif_id" ]]; then
+            echo "$line" | jq -c '.status = "read"'
+            echo "✓ Acknowledged: $id" >&2
+        else
+            echo "$line"
+        fi
+    done < "$inbox_file" > "$temp_file"
+
+    mv "$temp_file" "$inbox_file"
+}
+
+# Acknowledge all notifications
+ack_all() {
+    local inbox_file="$1"
+
+    if [[ ! -f "$inbox_file" ]]; then
+        echo "No inbox file found" >&2
+        return 1
+    fi
+
+    local temp_file=$(mktemp)
+    local count=0
+
+    while IFS= read -r line; do
+        local status=$(echo "$line" | jq -r '.status' 2>/dev/null)
+        if [[ "$status" == "pending" ]] || [[ "$status" == "delivered" ]]; then
+            echo "$line" | jq -c '.status = "read"'
+            ((count++)) || true
+        else
+            echo "$line"
+        fi
+    done < "$inbox_file" > "$temp_file"
+
+    mv "$temp_file" "$inbox_file"
+    echo "✓ Acknowledged $count notifications"
+}
+
+# Main execution
+
+AGENT=$(detect_agent)
+if [[ -z "$AGENT" ]]; then
+    echo "Could not detect agent identity from CWD: $(pwd)" >&2
+    echo "Run from a Gas Town agent directory" >&2
+    exit 1
+fi
+
+INBOX_FILE=$(get_inbox_file "$AGENT")
+
+CMD="${1:-list}"
+
+case "$CMD" in
+    list|show)
+        show_unread "$INBOX_FILE"
+        ;;
+    count)
+        count_unread "$INBOX_FILE"
+        ;;
+    ack)
+        if [[ -z "$2" ]]; then
+            echo "Usage: gt-inbox-check ack <notification-id>" >&2
+            exit 1
+        fi
+        ack_notification "$INBOX_FILE" "$2"
+        ;;
+    ack-all)
+        ack_all "$INBOX_FILE"
+        ;;
+    *)
+        echo "Usage: gt-inbox-check [list|count|ack <id>|ack-all]" >&2
+        exit 1
+        ;;
+esac
