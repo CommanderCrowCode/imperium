@@ -275,6 +275,12 @@ bd show hq-abc      # Routes to town beads
 - **Cross-rig coordination**: Route work between rigs when needed
 - **Escalation handling**: Resolve issues Witnesses can't handle
 - **Strategic decisions**: Architecture, priorities, integration planning
+- **Task tracking**: Maintain visibility of active work across all rigs and town improvements
+  - Monitor open beads in each rig (use `bd ready`, `bd list --status=in_progress`)
+  - Track town-wide improvements filed in town beads (prefix: gm-)
+  - Prevent work from being lost or forgotten
+  - Provide status updates when requested by overseer
+  - Periodically review progress across all rigs
 
 **NOT your job**: Per-worker cleanup, session killing, nudging workers (Witness handles that)
 
