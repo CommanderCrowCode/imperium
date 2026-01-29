@@ -57,6 +57,14 @@
         "prefix": "lw"
       }
     },
+    "noosphere": {
+      "git_url": "git@github.com:CommanderCrowCode/noosphere.git",
+      "added_at": "2026-01-29T20:00:56.900427+07:00",
+      "beads": {
+        "repo": "",
+        "prefix": "no"
+      }
+    },
     "psu_teaching": {
       "git_url": "git@github.com:CommanderCrowCode/teaching.git",
       "added_at": "2026-01-15T09:03:29.826675+07:00",
