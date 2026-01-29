@@ -1,0 +1,247 @@
+#!/usr/bin/env python3
+"""Generate periodic town digest with work descriptions.
+
+Provides comprehensive status updates including:
+- Work completed since last digest (from git logs)
+- Active work in progress (from beads)
+- Ready work waiting for assignment
+- Handles quiet periods and downtime gracefully
+"""
+
+import subprocess
+import sys
+import json
+from datetime import datetime, timedelta
+from pathlib import Path
+
+
+def run_cmd(cmd, cwd=None):
+    """Run command and return output."""
+    try:
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            cwd=cwd
+        )
+        return result.stdout.strip()
+    except Exception:
+        return ""
+
+
+def get_rigs(town_root="/Users/tanwa/gt"):
+    """Get list of all rigs."""
+    rigs = []
+    for path in Path(town_root).iterdir():
+        if path.is_dir() and (path / "mayor" / "rig").exists():
+            rigs.append(path.name)
+    return sorted(rigs)
+
+
+def get_recent_commits(rig_path, since_hours=24):
+    """Get recent commits with descriptions."""
+    since = datetime.now() - timedelta(hours=since_hours)
+    since_str = since.strftime("%Y-%m-%d %H:%M:%S")
+
+    cmd = f'git log --since="{since_str}" --pretty=format:"%h|%ai|%s" --no-merges'
+    output = run_cmd(cmd, cwd=rig_path)
+
+    commits = []
+    if output:
+        for line in output.split('\n'):
+            if line:
+                hash, date, subject = line.split('|', 2)
+                commits.append({
+                    'hash': hash,
+                    'date': date,
+                    'subject': subject
+                })
+
+    return commits
+
+
+def get_active_beads(rig_path):
+    """Get in-progress beads."""
+    cmd = "bd list --status=in_progress --json 2>/dev/null"
+    output = run_cmd(cmd, cwd=rig_path)
+
+    if output:
+        try:
+            return json.loads(output)
+        except:
+            pass
+
+    return []
+
+
+def get_ready_beads(rig_path):
+    """Get ready beads."""
+    cmd = "bd ready --json 2>/dev/null"
+    output = run_cmd(cmd, cwd=rig_path)
+
+    if output:
+        try:
+            return json.loads(output)
+        except:
+            pass
+
+    return []
+
+
+def get_town_beads():
+    """Get town-wide (gm-) beads."""
+    cmd = "bd list --status=in_progress --json 2>/dev/null"
+    output = run_cmd(cmd, cwd="/Users/tanwa/gt")
+
+    town_beads = []
+    if output:
+        try:
+            all_beads = json.loads(output)
+            town_beads = [b for b in all_beads if b.get('id', '').startswith('gm-')]
+        except:
+            pass
+
+    return town_beads
+
+
+def format_digest(since_hours=24):
+    """Generate digest content."""
+    town_root = Path("/Users/tanwa/gt")
+    rigs = get_rigs()
+
+    now = datetime.now()
+    since = now - timedelta(hours=since_hours)
+
+    lines = []
+    lines.append(f"# Gas Town Digest - {now.strftime('%Y-%m-%d %H:%M')}")
+    lines.append(f"")
+    lines.append(f"Activity since: {since.strftime('%Y-%m-%d %H:%M')} ({since_hours}h)")
+    lines.append("")
+
+    # Town-wide improvements
+    town_beads = get_town_beads()
+    if town_beads:
+        lines.append("## 🏛️ Town-Wide Improvements")
+        lines.append("")
+        for bead in town_beads[:5]:  # Limit to 5
+            title = bead.get('title', 'Untitled')
+            bead_id = bead.get('id', '')
+            priority = bead.get('priority', 2)
+            lines.append(f"- **{bead_id}** (P{priority}): {title}")
+        lines.append("")
+
+    # Per-rig activity
+    total_commits = 0
+    total_active = 0
+    total_ready = 0
+
+    active_rigs = []
+
+    for rig in rigs:
+        rig_path = town_root / rig / "mayor" / "rig"
+        if not rig_path.exists():
+            continue
+
+        commits = get_recent_commits(rig_path, since_hours)
+        active = get_active_beads(rig_path)
+        ready = get_ready_beads(rig_path)
+
+        total_commits += len(commits)
+        total_active += len(active)
+        total_ready += len(ready)
+
+        if commits or active:
+            active_rigs.append({
+                'name': rig,
+                'commits': commits,
+                'active': active,
+                'ready': ready
+            })
+
+    if active_rigs:
+        lines.append("## 📦 Rig Activity")
+        lines.append("")
+
+        for rig_info in active_rigs:
+            rig = rig_info['name']
+            commits = rig_info['commits']
+            active = rig_info['active']
+            ready = rig_info['ready']
+
+            lines.append(f"### {rig}")
+
+            if commits:
+                lines.append(f"**Completed ({len(commits)} commits):**")
+                for commit in commits[:3]:  # Show up to 3 recent commits
+                    lines.append(f"  - [{commit['hash']}] {commit['subject']}")
+                if len(commits) > 3:
+                    lines.append(f"  - ...and {len(commits) - 3} more")
+                lines.append("")
+
+            if active:
+                lines.append(f"**Active ({len(active)} in progress):**")
+                for bead in active[:3]:  # Show up to 3
+                    title = bead.get('title', 'Untitled')
+                    bead_id = bead.get('id', '')
+                    lines.append(f"  - {bead_id}: {title}")
+                if len(active) > 3:
+                    lines.append(f"  - ...and {len(active) - 3} more")
+                lines.append("")
+
+            if ready:
+                lines.append(f"**Ready ({len(ready)} waiting):**")
+                for bead in ready[:3]:
+                    title = bead.get('title', 'Untitled')
+                    bead_id = bead.get('id', '')
+                    lines.append(f"  - {bead_id}: {title}")
+                if len(ready) > 3:
+                    lines.append(f"  - ...and {len(ready) - 3} more")
+                lines.append("")
+    else:
+        lines.append("## 🌙 Quiet Period")
+        lines.append("")
+        lines.append("No significant activity in the past %sh." % since_hours)
+        lines.append("All rigs idle or in maintenance mode.")
+        lines.append("")
+
+    # Summary
+    lines.append("## 📊 Summary")
+    lines.append("")
+    lines.append(f"- **Commits**: {total_commits}")
+    lines.append(f"- **Active work**: {total_active} beads")
+    lines.append(f"- **Ready work**: {total_ready} beads")
+    lines.append(f"- **Active rigs**: {len(active_rigs)}/{len(rigs)}")
+
+    return '\n'.join(lines)
+
+
+def main():
+    since_hours = int(sys.argv[1]) if len(sys.argv) > 1 else 24
+    recipient = sys.argv[2] if len(sys.argv) > 2 else "overseer"
+
+    digest = format_digest(since_hours)
+
+    # Print to stdout
+    print(digest)
+    print()
+
+    # Send via mail
+    subject = f"📊 Town Digest ({datetime.now().strftime('%Y-%m-%d %H:%M')})"
+
+    # Escape single quotes in digest for shell
+    digest_escaped = digest.replace("'", "'\\''")
+
+    cmd = f"gt mail send {recipient} -s '{subject}' -m '{digest_escaped}'"
+    result = subprocess.run(cmd, shell=True, capture_output=True)
+
+    if result.returncode == 0:
+        print(f"✓ Digest sent to {recipient}")
+    else:
+        print(f"✗ Failed to send digest")
+        if result.stderr:
+            print(f"   {result.stderr.decode()}")
+
+
+if __name__ == '__main__':
+    main()

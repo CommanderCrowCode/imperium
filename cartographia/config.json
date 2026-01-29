@@ -1,0 +1,11 @@
+{
+  "type": "rig",
+  "version": 1,
+  "name": "cartographia",
+  "git_url": "git@github.com:CommanderCrowCode/cartographia.git",
+  "default_branch": "main",
+  "created_at": "2026-01-29T14:04:53.107948+07:00",
+  "beads": {
+    "prefix": "ca"
+  }
+}
