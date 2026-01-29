@@ -1,0 +1,258 @@
+#!/bin/bash
+# gt-notify: Resilient agent notification with persistent queue
+#
+# Usage: gt-notify <recipient> -s "Subject" -m "Message"
+#        gt-notify <recipient> -s "Subject" < message.txt
+#
+# Part of the defense-in-depth notification system:
+#   Layer 1: Persistent queue (this script) - never loses messages
+#   Layer 2: tmux send-keys (fast path) - immediate delivery
+#   Layer 3: .notification-pending marker - triggers on startup
+#
+# Example:
+#   gt-notify psu_teaching/polecats/furiosa -s "New work" -m "Check bead xyz"
+#   gt-notify mayor/ -s "Escalation" -m "Polecat stuck"
+
+set -e
+
+GT_ROOT="${GT_ROOT:-$HOME/gt}"
+INBOX_ROOT="${AGENT_INBOX_ROOT:-$HOME/.agent-inbox}"
+
+# Parse arguments
+RECIPIENT=""
+SUBJECT=""
+MESSAGE=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -s|--subject)
+            SUBJECT="$2"
+            shift 2
+            ;;
+        -m|--message)
+            MESSAGE="$2"
+            shift 2
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            if [[ -z "$RECIPIENT" ]]; then
+                RECIPIENT="$1"
+            else
+                echo "Unexpected argument: $1" >&2
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Read message from stdin if not provided
+if [[ -z "$MESSAGE" ]]; then
+    if [[ ! -t 0 ]]; then
+        MESSAGE=$(cat)
+    else
+        echo "Usage: gt-notify <recipient> -s 'Subject' -m 'Message'" >&2
+        exit 1
+    fi
+fi
+
+if [[ -z "$RECIPIENT" ]] || [[ -z "$SUBJECT" ]]; then
+    echo "Usage: gt-notify <recipient> -s 'Subject' -m 'Message'" >&2
+    exit 1
+fi
+
+# Detect sender from CWD (same logic as gt-mail-safe)
+detect_sender() {
+    local pwd_path=$(pwd)
+
+    if [[ "$pwd_path" =~ $GT_ROOT/([^/]+)/(polecats|crew)/([^/]+) ]]; then
+        echo "${BASH_REMATCH[1]}/${BASH_REMATCH[2]}/${BASH_REMATCH[3]}"
+    elif [[ "$pwd_path" =~ $GT_ROOT/([^/]+)/(witness) ]]; then
+        echo "${BASH_REMATCH[1]}/witness"
+    elif [[ "$pwd_path" =~ $GT_ROOT/([^/]+)/(refinery) ]]; then
+        echo "${BASH_REMATCH[1]}/refinery"
+    elif [[ "$pwd_path" == "$GT_ROOT/mayor" ]] || [[ "$pwd_path" =~ $GT_ROOT/mayor/ ]]; then
+        echo "mayor"
+    elif [[ "$pwd_path" == "$GT_ROOT/deacon" ]] || [[ "$pwd_path" =~ $GT_ROOT/deacon/ ]]; then
+        echo "deacon"
+    else
+        echo "unknown"
+    fi
+}
+
+# Convert recipient address to inbox path
+# e.g., "psu_teaching/polecats/furiosa" → "psu_teaching-polecats-furiosa"
+recipient_to_inbox_id() {
+    local recipient="$1"
+    # Normalize: remove trailing slashes, convert / to -
+    echo "$recipient" | sed 's:/$::' | tr '/' '-'
+}
+
+# Get agent workspace path for .notification-pending marker
+recipient_to_workspace() {
+    local recipient="$1"
+    # Remove trailing slash
+    recipient="${recipient%/}"
+
+    case "$recipient" in
+        mayor|mayor/)
+            echo "$GT_ROOT/mayor"
+            ;;
+        deacon|deacon/)
+            echo "$GT_ROOT/deacon"
+            ;;
+        overseer|overseer/)
+            # Overseer is human - no workspace
+            echo ""
+            ;;
+        */polecats/*)
+            # e.g., psu_teaching/polecats/furiosa
+            local rig=$(echo "$recipient" | cut -d'/' -f1)
+            local name=$(echo "$recipient" | cut -d'/' -f3)
+            echo "$GT_ROOT/$rig/polecats/$name"
+            ;;
+        */crew/*)
+            # e.g., psu_teaching/crew/planner
+            local rig=$(echo "$recipient" | cut -d'/' -f1)
+            local name=$(echo "$recipient" | cut -d'/' -f3)
+            echo "$GT_ROOT/$rig/crew/$name"
+            ;;
+        */witness)
+            local rig=$(echo "$recipient" | cut -d'/' -f1)
+            echo "$GT_ROOT/$rig/witness"
+            ;;
+        */refinery)
+            local rig=$(echo "$recipient" | cut -d'/' -f1)
+            echo "$GT_ROOT/$rig/refinery"
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+# Get tmux session name for recipient
+recipient_to_session() {
+    local recipient="$1"
+    recipient="${recipient%/}"
+
+    case "$recipient" in
+        mayor|mayor/)
+            echo "gt-mayor"
+            ;;
+        deacon|deacon/)
+            echo "gt-deacon"
+            ;;
+        overseer|overseer/)
+            echo ""  # No tmux session for overseer
+            ;;
+        */polecats/*)
+            local rig=$(echo "$recipient" | cut -d'/' -f1)
+            local name=$(echo "$recipient" | cut -d'/' -f3)
+            echo "gt-$rig-$name"
+            ;;
+        */crew/*)
+            local rig=$(echo "$recipient" | cut -d'/' -f1)
+            local name=$(echo "$recipient" | cut -d'/' -f3)
+            echo "gt-$rig-crew-$name"
+            ;;
+        */witness)
+            local rig=$(echo "$recipient" | cut -d'/' -f1)
+            echo "gt-$rig-witness"
+            ;;
+        */refinery)
+            local rig=$(echo "$recipient" | cut -d'/' -f1)
+            echo "gt-$rig-refinery"
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+# Generate notification ID
+generate_id() {
+    # Use timestamp + random for uniqueness
+    echo "$(date +%s)-$(head -c4 /dev/urandom | xxd -p)"
+}
+
+# Main execution
+
+SENDER=$(detect_sender)
+INBOX_ID=$(recipient_to_inbox_id "$RECIPIENT")
+WORKSPACE=$(recipient_to_workspace "$RECIPIENT")
+SESSION=$(recipient_to_session "$RECIPIENT")
+NOTIFICATION_ID=$(generate_id)
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+# Create inbox directory
+INBOX_DIR="$INBOX_ROOT/$INBOX_ID"
+mkdir -p "$INBOX_DIR"
+
+# Write notification to persistent queue (Layer 1)
+NOTIFICATION=$(jq -n \
+    --arg id "$NOTIFICATION_ID" \
+    --arg from "$SENDER" \
+    --arg to "$RECIPIENT" \
+    --arg subject "$SUBJECT" \
+    --arg message "$MESSAGE" \
+    --arg timestamp "$TIMESTAMP" \
+    --arg status "pending" \
+    '{id: $id, from: $from, to: $to, subject: $subject, message: $message, timestamp: $timestamp, status: $status}')
+
+echo "$NOTIFICATION" >> "$INBOX_DIR/notifications.jsonl"
+
+# Create .notification-pending marker (Layer 3)
+if [[ -n "$WORKSPACE" ]] && [[ -d "$WORKSPACE" ]]; then
+    touch "$WORKSPACE/.notification-pending"
+fi
+
+# Try tmux notification (Layer 2 - fast path)
+TMUX_RESULT="no_session"
+if [[ -n "$SESSION" ]]; then
+    if tmux has-session -t "$SESSION" 2>/dev/null; then
+        # Session exists - send notification
+        if tmux send-keys -t "$SESSION" "# 📬 New notification from $SENDER: $SUBJECT" Enter 2>/dev/null; then
+            TMUX_RESULT="delivered"
+            # Update status to delivered
+            # Use temp file for atomic update
+            TEMP_FILE=$(mktemp)
+            jq "if .id == \"$NOTIFICATION_ID\" then .status = \"delivered\" else . end" \
+                "$INBOX_DIR/notifications.jsonl" > "$TEMP_FILE" 2>/dev/null || true
+            if [[ -s "$TEMP_FILE" ]]; then
+                mv "$TEMP_FILE" "$INBOX_DIR/notifications.jsonl"
+            else
+                rm -f "$TEMP_FILE"
+            fi
+        else
+            TMUX_RESULT="send_failed"
+        fi
+    else
+        TMUX_RESULT="no_session"
+    fi
+fi
+
+# Log result
+LOG_DIR="$INBOX_ROOT/.logs"
+mkdir -p "$LOG_DIR"
+echo "$(date -u +"%Y-%m-%dT%H:%M:%SZ") | $NOTIFICATION_ID | $SENDER → $RECIPIENT | tmux=$TMUX_RESULT | $SUBJECT" >> "$LOG_DIR/delivery.log"
+
+# Output receipt
+echo "$NOTIFICATION_ID"
+echo "Queued: $INBOX_DIR/notifications.jsonl"
+echo "Tmux: $TMUX_RESULT ($SESSION)"
+
+# Exit with appropriate code
+case "$TMUX_RESULT" in
+    delivered)
+        exit 0
+        ;;
+    *)
+        # Message queued but not immediately delivered
+        # Exit 0 because queue is the source of truth
+        exit 0
+        ;;
+esac
