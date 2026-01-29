@@ -434,6 +434,10 @@ Only a fresh session (via `gt handoff`) reloads the protocol files.
 - `gt convoy create "name" <issues>` - Create convoy for batch work
 - `bd ready` - Issues ready to work (no blockers)
 
+### Rate Limit Recovery
+- `gt-rate-limit-scan` - Detect rate-limited sessions
+- `gt-rate-limit-recovery` - Resume all stuck sessions (run after limit resets)
+
 ### Slinging Work (IMPORTANT: Use workaround scripts)
 
 **Known bug:** `gt sling` and `gt hook` don't properly set the `assignee` field,
@@ -750,6 +754,48 @@ Reference from Steve Yegge's Gas Town article. Use these to verify agents are wo
 | Graceful degradation | Workers work independently if others down | Stop Deacon, verify Witness |
 | Cross-rig work | Use `gt worktree` for other rigs | Assign cross-rig task |
 | gt handoff | Graceful cleanup and restart | Issue `/handoff` |
+
+### Rate Limit Recovery
+
+When API rate limits hit, agents get stuck and don't auto-resume. Use these
+scripts for coordinated town-wide recovery:
+
+**Detection:**
+```bash
+# Scan all sessions for rate limit errors
+gt-rate-limit-scan              # Human-readable output
+gt-rate-limit-scan --json       # JSON output
+gt-rate-limit-scan --mail-mayor # Auto-notify mayor
+```
+
+**Recovery (run after rate limit resets):**
+```bash
+# Nudge all stuck sessions to resume work
+gt-rate-limit-recovery          # Interactive (asks confirmation)
+gt-rate-limit-recovery --force  # No confirmation
+gt-rate-limit-recovery --restart # Also restart dead sessions
+gt-rate-limit-recovery --mail-overseer # Send completion report
+
+# Dry run to see what would happen
+gt-rate-limit-recovery --dry-run
+```
+
+**Recovery workflow:**
+1. Rate limit hits → sessions show "rate limit" errors
+2. Overseer (or automation) runs `gt-rate-limit-scan --mail-mayor`
+3. Mayor receives mail with stuck session list
+4. When limit resets (typically 12pm Bangkok), Mayor runs `gt-rate-limit-recovery`
+5. Recovery script nudges all stuck sessions via tmux send-keys
+6. Report sent to overseer if `--mail-overseer` flag used
+
+**On Mayor startup:** Check mail for rate limit recovery requests:
+```bash
+gt-mail-safe inbox | grep -i "rate limit"
+```
+
+If found, run recovery after confirming limit has reset.
+
+---
 
 ### Known Gaps & Workarounds
 

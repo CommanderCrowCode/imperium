@@ -1,0 +1,180 @@
+#!/bin/bash
+# gt-rate-limit-scan: Scan all Gas Town sessions for rate limit errors
+#
+# Detects sessions that are stuck due to API rate limits or capacity errors.
+# This is meant for overseer/automation to detect rate limit events and
+# coordinate recovery via Mayor.
+#
+# Usage: gt-rate-limit-scan [--json] [--mail-mayor] [--quiet]
+#
+# Options:
+#   --json        Output results as JSON
+#   --mail-mayor  Send mail to mayor if rate-limited sessions found
+#   --quiet       Only output if rate-limited sessions found
+#
+# Exit codes:
+#   0 - No rate-limited sessions found
+#   1 - Rate-limited sessions detected
+#   2 - Error during scan
+
+set -e
+
+# Parse arguments
+JSON_OUTPUT=false
+MAIL_MAYOR=false
+QUIET=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --json)
+            JSON_OUTPUT=true
+            shift
+            ;;
+        --mail-mayor)
+            MAIL_MAYOR=true
+            shift
+            ;;
+        --quiet)
+            QUIET=true
+            shift
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            echo "Usage: gt-rate-limit-scan [--json] [--mail-mayor] [--quiet]" >&2
+            exit 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+# Get all Gas Town sessions
+ALL_SESSIONS=$(tmux ls 2>/dev/null | grep "^gt-" | cut -d: -f1 || echo "")
+
+if [ -z "$ALL_SESSIONS" ]; then
+    if ! $QUIET; then
+        if $JSON_OUTPUT; then
+            echo '{"status": "no_sessions", "rate_limited": [], "total_sessions": 0}'
+        else
+            echo "No Gas Town sessions found"
+        fi
+    fi
+    exit 0
+fi
+
+# Track results
+RATE_LIMITED=()
+TOTAL=0
+SCANNED=0
+
+# Scan each session
+for SESSION in $ALL_SESSIONS; do
+    TOTAL=$((TOTAL + 1))
+
+    # Skip crew sessions (human-managed, not auto-resumed)
+    if [[ "$SESSION" =~ -crew- ]]; then
+        continue
+    fi
+
+    SCANNED=$((SCANNED + 1))
+
+    # Capture session output (only last 30 lines for recent errors)
+    OUTPUT=$(tmux capture-pane -t "$SESSION" -p -S -30 2>/dev/null || echo "")
+
+    # Look for actual rate limit errors from Claude Code
+    # Real errors have specific patterns and don't contain code characters like |, $, (), etc.
+    RATE_ERROR=""
+
+    # Get lines that might be rate limit errors (rough filter)
+    # Then validate each candidate more carefully
+    while IFS= read -r line; do
+        # Skip if line is empty or very short
+        [ ${#line} -lt 10 ] && continue
+
+        # Skip if line looks like code (contains common code patterns)
+        echo "$line" | grep -qE '\$|\||grep|echo|if |then|fi|done|esac|\(\)|{}|\[\]|def |function |#.*:' && continue
+
+        # Skip if line has file-like patterns
+        echo "$line" | grep -qE '/[a-z]+/|\.sh|\.py|\.md|\.js' && continue
+
+        # Skip if line starts with common code prefixes
+        echo "$line" | grep -qE '^[[:space:]]*[#*+-]|^[0-9]+→' && continue
+
+        # Now check if this line contains a genuine rate limit error
+        if echo "$line" | grep -qiE "(rate limit exceeded|too many requests|429|overloaded|at capacity)" 2>/dev/null; then
+            RATE_ERROR="$line"
+            break
+        fi
+    done <<< "$OUTPUT"
+
+    if [ -n "$RATE_ERROR" ]; then
+        RATE_LIMITED+=("$SESSION|$(echo "$RATE_ERROR" | head -c 100)")
+    fi
+done
+
+# Determine exit status
+if [ ${#RATE_LIMITED[@]} -eq 0 ]; then
+    if ! $QUIET; then
+        if $JSON_OUTPUT; then
+            echo "{\"status\": \"ok\", \"rate_limited\": [], \"total_sessions\": $TOTAL, \"scanned\": $SCANNED}"
+        else
+            echo "✅ No rate-limited sessions found"
+            echo "   Scanned: $SCANNED / $TOTAL sessions"
+        fi
+    fi
+    exit 0
+fi
+
+# Rate-limited sessions found
+if $JSON_OUTPUT; then
+    echo -n "{\"status\": \"rate_limited\", \"rate_limited\": ["
+    FIRST=true
+    for entry in "${RATE_LIMITED[@]}"; do
+        SESSION=$(echo "$entry" | cut -d'|' -f1)
+        ERROR=$(echo "$entry" | cut -d'|' -f2- | sed 's/"/\\"/g')
+        if $FIRST; then
+            echo -n "{\"session\": \"$SESSION\", \"error\": \"$ERROR\"}"
+            FIRST=false
+        else
+            echo -n ", {\"session\": \"$SESSION\", \"error\": \"$ERROR\"}"
+        fi
+    done
+    echo "], \"total_sessions\": $TOTAL, \"scanned\": $SCANNED, \"count\": ${#RATE_LIMITED[@]}}"
+else
+    echo "🚨 Rate-limited sessions detected: ${#RATE_LIMITED[@]}"
+    echo ""
+    for entry in "${RATE_LIMITED[@]}"; do
+        SESSION=$(echo "$entry" | cut -d'|' -f1)
+        ERROR=$(echo "$entry" | cut -d'|' -f2-)
+        echo "  - $SESSION"
+        if [ -n "$ERROR" ]; then
+            echo "    └─ $ERROR"
+        fi
+    done
+    echo ""
+    echo "Scanned: $SCANNED / $TOTAL sessions"
+fi
+
+# Send mail to mayor if requested
+if $MAIL_MAYOR; then
+    SESSION_LIST=""
+    for entry in "${RATE_LIMITED[@]}"; do
+        SESSION=$(echo "$entry" | cut -d'|' -f1)
+        SESSION_LIST="${SESSION_LIST}\n  - $SESSION"
+    done
+
+    ~/gt/bin/gt-mail-safe send mayor/ \
+        -s "🚨 Rate limit detected: ${#RATE_LIMITED[@]} sessions stuck" \
+        -m "Rate-limited sessions requiring recovery:
+$SESSION_LIST
+
+Run \`gt-rate-limit-recovery\` to resume these sessions once the rate limit resets.
+
+Detection time: $(date '+%Y-%m-%d %H:%M:%S')"
+
+    echo ""
+    echo "📬 Mail sent to mayor"
+fi
+
+exit 1

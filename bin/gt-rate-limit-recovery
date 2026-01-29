@@ -1,0 +1,357 @@
+#!/bin/bash
+# gt-rate-limit-recovery: Mayor's town-wide rate limit recovery orchestrator
+#
+# This script coordinates recovery of all Gas Town sessions after a rate limit
+# event. It should be run by Mayor (or overseer) after the rate limit resets.
+#
+# Recovery actions:
+# 1. Scan all agent sessions (polecats, witnesses, refineries)
+# 2. Identify stuck sessions (rate limit errors, idle too long)
+# 3. Nudge stuck sessions via tmux send-keys
+# 4. Optionally restart non-responsive sessions
+# 5. Report results
+#
+# Usage: gt-rate-limit-recovery [options]
+#
+# Options:
+#   --dry-run      Show what would be done without taking action
+#   --restart      Restart non-responsive sessions (not just nudge)
+#   --force        Skip confirmation prompt
+#   --json         Output results as JSON
+#   --mail-overseer Send completion report to overseer
+#
+# Exit codes:
+#   0 - Recovery completed successfully
+#   1 - Some sessions could not be recovered
+#   2 - Error during recovery
+
+set -e
+
+# Parse arguments
+DRY_RUN=false
+RESTART=false
+FORCE=false
+JSON_OUTPUT=false
+MAIL_OVERSEER=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --restart)
+            RESTART=true
+            shift
+            ;;
+        --force)
+            FORCE=true
+            shift
+            ;;
+        --json)
+            JSON_OUTPUT=true
+            shift
+            ;;
+        --mail-overseer)
+            MAIL_OVERSEER=true
+            shift
+            ;;
+        -*)
+            echo "Unknown option: $1" >&2
+            exit 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+# Confirmation if not forced
+if ! $FORCE && ! $DRY_RUN; then
+    echo "🔄 Gas Town Rate Limit Recovery"
+    echo ""
+    echo "This will nudge all stuck sessions to resume work."
+    read -p "Proceed? [y/N] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Aborted."
+        exit 0
+    fi
+fi
+
+# Get all Gas Town sessions
+ALL_SESSIONS=$(tmux ls 2>/dev/null | grep "^gt-" | cut -d: -f1 || echo "")
+
+if [ -z "$ALL_SESSIONS" ]; then
+    if $JSON_OUTPUT; then
+        echo '{"status": "no_sessions", "nudged": [], "restarted": [], "failed": []}'
+    else
+        echo "No Gas Town sessions found"
+    fi
+    exit 0
+fi
+
+# Track results
+NUDGED=()
+RESTARTED=()
+FAILED=()
+SKIPPED=()
+HEALTHY=()
+
+# Nudge message
+NUDGE_MSG="🔄 RATE LIMIT RECOVERY: The rate limit has reset. Please resume your work. Run \`gt hook\` to check your assignment or \`gt-mail-safe inbox\` for pending requests."
+
+# Process each session
+for SESSION in $ALL_SESSIONS; do
+    # Skip mayor session (we ARE the mayor)
+    if [[ "$SESSION" == "gt-mayor" ]]; then
+        SKIPPED+=("$SESSION (self)")
+        continue
+    fi
+
+    # Skip crew sessions (human-managed)
+    # Match both "gt-rig-crew" and "gt-rig-crew-name" patterns
+    if [[ "$SESSION" =~ -crew($|-) ]]; then
+        SKIPPED+=("$SESSION (crew)")
+        continue
+    fi
+
+    # Check session health
+    OUTPUT=$(tmux capture-pane -t "$SESSION" -p -S -30 2>/dev/null || echo "")
+
+    # Determine if session needs recovery
+    NEEDS_RECOVERY=false
+    RECOVERY_REASON=""
+
+    # Check for rate limit errors (using refined detection to avoid false positives)
+    # Scan each line individually and skip code-like patterns
+    RATE_LIMIT_FOUND=false
+    while IFS= read -r line; do
+        [ ${#line} -lt 10 ] && continue
+        echo "$line" | grep -qE '\$|\||grep|echo|if |then|fi|done|esac|\(\)|{}|\[\]|def |function |#.*:' && continue
+        echo "$line" | grep -qE '/[a-z]+/|\.sh|\.py|\.md|\.js' && continue
+        echo "$line" | grep -qE '^[[:space:]]*[#*+-]|^[0-9]+→' && continue
+        if echo "$line" | grep -qiE "(rate limit exceeded|too many requests|429|overloaded|at capacity)" 2>/dev/null; then
+            RATE_LIMIT_FOUND=true
+            break
+        fi
+    done <<< "$OUTPUT"
+
+    if $RATE_LIMIT_FOUND; then
+        NEEDS_RECOVERY=true
+        RECOVERY_REASON="rate_limited"
+    fi
+
+    # Check for stuck at INSERT prompt (idle)
+    if echo "$OUTPUT" | tail -10 | grep -qE "^❯\s*$" 2>/dev/null; then
+        # Empty prompt - definitely idle
+        NEEDS_RECOVERY=true
+        if [ -z "$RECOVERY_REASON" ]; then
+            RECOVERY_REASON="idle_prompt"
+        fi
+    fi
+
+    # Check for error messages
+    if echo "$OUTPUT" | tail -30 | grep -qiE "(error|exception|failed|fatal)" 2>/dev/null; then
+        # Has recent errors - might need nudge
+        if ! echo "$OUTPUT" | tail -5 | grep -q "⏺" 2>/dev/null; then
+            # No recent tool activity
+            NEEDS_RECOVERY=true
+            if [ -z "$RECOVERY_REASON" ]; then
+                RECOVERY_REASON="error_state"
+            fi
+        fi
+    fi
+
+    if ! $NEEDS_RECOVERY; then
+        HEALTHY+=("$SESSION")
+        continue
+    fi
+
+    # Recovery action
+    if $DRY_RUN; then
+        echo "[DRY-RUN] Would nudge: $SESSION ($RECOVERY_REASON)"
+        NUDGED+=("$SESSION")
+        continue
+    fi
+
+    # Send nudge via tmux
+    if tmux send-keys -t "$SESSION" "$NUDGE_MSG" 2>/dev/null; then
+        sleep 0.1
+        if tmux send-keys -t "$SESSION" Enter 2>/dev/null; then
+            NUDGED+=("$SESSION")
+            if ! $JSON_OUTPUT; then
+                echo "✅ Nudged: $SESSION ($RECOVERY_REASON)"
+            fi
+        else
+            FAILED+=("$SESSION (enter failed)")
+        fi
+    else
+        # Session might be dead - try restart if enabled
+        if $RESTART; then
+            # Extract rig from session name
+            # Format: gt-<rig>-<name> or gt-<rig>-<role>
+            RIG=$(echo "$SESSION" | sed 's/^gt-//' | cut -d'-' -f1)
+            ROLE=$(echo "$SESSION" | sed 's/^gt-//' | cut -d'-' -f2-)
+
+            # Determine agent directory
+            AGENT_DIR=""
+            if [[ "$ROLE" == "witness" ]]; then
+                AGENT_DIR="${HOME}/gt/${RIG}/witness"
+            elif [[ "$ROLE" == "refinery" ]]; then
+                AGENT_DIR="${HOME}/gt/${RIG}/refinery"
+            else
+                # Polecat
+                AGENT_DIR="${HOME}/gt/${RIG}/polecats/${ROLE}"
+            fi
+
+            if [ -d "$AGENT_DIR" ]; then
+                if ~/gt/bin/gt-spawn-agent "$AGENT_DIR" 2>/dev/null; then
+                    RESTARTED+=("$SESSION")
+                    if ! $JSON_OUTPUT; then
+                        echo "🔄 Restarted: $SESSION"
+                    fi
+                else
+                    FAILED+=("$SESSION (restart failed)")
+                fi
+            else
+                FAILED+=("$SESSION (dir not found: $AGENT_DIR)")
+            fi
+        else
+            FAILED+=("$SESSION (nudge failed, use --restart)")
+        fi
+    fi
+
+    # Small delay to avoid overwhelming the system
+    sleep 0.2
+done
+
+# Output results
+if $JSON_OUTPUT; then
+    echo -n "{\"status\": \"complete\", "
+
+    # Nudged
+    echo -n "\"nudged\": ["
+    FIRST=true
+    for s in "${NUDGED[@]}"; do
+        if $FIRST; then
+            echo -n "\"$s\""
+            FIRST=false
+        else
+            echo -n ", \"$s\""
+        fi
+    done
+    echo -n "], "
+
+    # Restarted
+    echo -n "\"restarted\": ["
+    FIRST=true
+    for s in "${RESTARTED[@]}"; do
+        if $FIRST; then
+            echo -n "\"$s\""
+            FIRST=false
+        else
+            echo -n ", \"$s\""
+        fi
+    done
+    echo -n "], "
+
+    # Failed
+    echo -n "\"failed\": ["
+    FIRST=true
+    for s in "${FAILED[@]}"; do
+        if $FIRST; then
+            echo -n "\"$s\""
+            FIRST=false
+        else
+            echo -n ", \"$s\""
+        fi
+    done
+    echo -n "], "
+
+    # Healthy
+    echo -n "\"healthy\": ["
+    FIRST=true
+    for s in "${HEALTHY[@]}"; do
+        if $FIRST; then
+            echo -n "\"$s\""
+            FIRST=false
+        else
+            echo -n ", \"$s\""
+        fi
+    done
+    echo -n "], "
+
+    # Skipped
+    echo -n "\"skipped\": ["
+    FIRST=true
+    for s in "${SKIPPED[@]}"; do
+        if $FIRST; then
+            echo -n "\"$s\""
+            FIRST=false
+        else
+            echo -n ", \"$s\""
+        fi
+    done
+    echo -n "]"
+
+    echo "}"
+else
+    echo ""
+    echo "═══════════════════════════════════════"
+    echo "🔄 Rate Limit Recovery Complete"
+    echo "═══════════════════════════════════════"
+    echo ""
+    echo "✅ Nudged:    ${#NUDGED[@]}"
+    echo "🔄 Restarted: ${#RESTARTED[@]}"
+    echo "❌ Failed:    ${#FAILED[@]}"
+    echo "💚 Healthy:   ${#HEALTHY[@]}"
+    echo "⏭️  Skipped:   ${#SKIPPED[@]}"
+    echo ""
+
+    if [ ${#FAILED[@]} -gt 0 ]; then
+        echo "Failed sessions:"
+        for s in "${FAILED[@]}"; do
+            echo "  - $s"
+        done
+        echo ""
+    fi
+fi
+
+# Send report to overseer if requested
+if $MAIL_OVERSEER; then
+    REPORT="Rate Limit Recovery Report
+═══════════════════════════════════════
+
+Time: $(date '+%Y-%m-%d %H:%M:%S')
+
+Results:
+  ✅ Nudged:    ${#NUDGED[@]}
+  🔄 Restarted: ${#RESTARTED[@]}
+  ❌ Failed:    ${#FAILED[@]}
+  💚 Healthy:   ${#HEALTHY[@]}
+  ⏭️  Skipped:   ${#SKIPPED[@]}"
+
+    if [ ${#FAILED[@]} -gt 0 ]; then
+        REPORT="$REPORT
+
+Failed sessions requiring manual intervention:"
+        for s in "${FAILED[@]}"; do
+            REPORT="$REPORT
+  - $s"
+        done
+    fi
+
+    ~/gt/bin/gt-mail-safe send overseer \
+        -s "🔄 Rate Limit Recovery: ${#NUDGED[@]} nudged, ${#FAILED[@]} failed" \
+        -m "$REPORT"
+
+    echo "📬 Report sent to overseer"
+fi
+
+# Exit with appropriate code
+if [ ${#FAILED[@]} -gt 0 ]; then
+    exit 1
+else
+    exit 0
+fi
