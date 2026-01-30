@@ -1,16 +1,4 @@
-{"prefix":"ti-","path":"tanwa_info/mayor/rig"}
-{"prefix":"ds-","path":"10x_screening/mayor/rig"}
-{"prefix":"li-","path":"lumicello_inventory/mayor/rig"}
-{"prefix":"fd-","path":"flamingo_dominion/mayor/rig"}
-{"prefix":"lw-","path":"lumicello_website/mayor/rig"}
-{"prefix":"tcm-","path":"tools_cc_monitor/mayor/rig"}
-{"prefix":"cc-","path":"commander_crow/mayor/rig"}
-{"prefix":"gm-","path":"."}
-{"prefix":"lbg-","path":"lumicello_big_garden"}
-{"prefix":"wa-","path":"watchtower"}
-{"prefix":"pt-","path":"psu_teaching"}
-{"prefix":"scripts-","path":"utility_scripts/mayor/rig"}
-{"prefix":"ac-","path":"ananda_consulting"}
-{"prefix":"ve-","path":"vector"}
-{"prefix":"ca-","path":"cartographia"}
-{"prefix":"no-","path":"noosphere"}
+{
+  "prefix": "ve-",
+  "path": "vector"
+}
