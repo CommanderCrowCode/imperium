@@ -1,0 +1,30 @@
+#!/bin/bash
+# gt-costs-if-needed - Conditionally record costs based on subscription type
+#
+# Checks ~/.claude/subscription (or GT_SUBSCRIPTION env var) to determine
+# whether to record costs. Skip if subscription is "max" or "enterprise".
+#
+# Usage: gt-costs-if-needed [gt costs record args...]
+
+# Check environment variable first
+SUBSCRIPTION="${GT_SUBSCRIPTION:-}"
+
+# If not set, check config file
+if [ -z "$SUBSCRIPTION" ] && [ -f ~/.claude/subscription ]; then
+    SUBSCRIPTION=$(cat ~/.claude/subscription | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+fi
+
+# Default to "pro" if not set (meaning: record costs)
+SUBSCRIPTION="${SUBSCRIPTION:-pro}"
+
+# Skip cost recording for unlimited plans
+case "$SUBSCRIPTION" in
+    max|enterprise|unlimited)
+        # Silently skip - no cost tracking needed
+        exit 0
+        ;;
+    *)
+        # Record costs for pro, team, api, etc.
+        exec gt costs record "$@"
+        ;;
+esac
