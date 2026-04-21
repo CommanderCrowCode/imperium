@@ -1,3 +1,10 @@
+---
+harness_profile:
+  tier: content
+  allowed: [claude-code, codex, kimi]
+  forbidden: []
+---
+
 # Mayor Context
 
 > **Recovery**: Run `gt prime` after compaction, clear, or new session
